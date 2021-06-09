@@ -236,70 +236,70 @@ for iter_i in range(niter):
         time_left = (end_pcffgn_run - start_ffgn_run) * ((niter * nimages) - (iter_i * nimages + (image_i + 1)))
         print(f'estimated time of completion: {datetime.timedelta(seconds=time_left)}')
 
-        # # WEIGHT UPDATES
-        # hebb_dict = {}
-        #
-        # for i in range(nlayerPC):
-        #     pci = 'PC' + str(i + 1)
-        #
-        #     # store mean errors
-        #     Ierror_dict = np.mean(np.abs(monitor_dict['E' + str(i) + 'p'].Ierror[:, -last_t:] / pamp), axis=1)
-        #     # store SSE
-        #     pc_layer_dict['sse'][pci][image_i, iter_i] = np.sum(Ierror_dict ** 2)
-        #     # pc_layer_dict['sse'][pci][iter_i * nimages + image_i + 1] = np.sum(
-        #     #     Ierror_dict[pci] ** 2)
-        #
-        #     hebb_dict[pci] = {}
-        #     # postsynaptic variable :
-        #     # hebb_dict[pci]['post'] = np.einsum('ij,ik->ijk',
-        #     #                                    pc_layer_dict['ws'][pci][1].T,
-        #     #                                    monitor_dict['P' + str(i + 1)].x_trace[:, -last_t:])
-        #     hebb_dict[pci]['post'] = monitor_dict['P' + str(i + 1)].x_trace[:, -last_t:]
-        #
-        #     # # resilience to learning hebb_dict[pci]['res'] = np.tile(Ierror_dict[pci] > dw_lim, nlayer_dict['P' +
-        #     # str(i + 1)]).reshape(nlayer_dict['P' + str(i + 1)], nlayer_dict['E' + str(i) + 'p']).T * 1 L1
-        #     # regularization error
-        #     # hebb_dict[pci]['L1reg'] = (Lw_max[i] / l1reg_alpha) * np.sign(pc_layer_dict['ws'][pci][1])
-        #     hebb_dict[pci]['L2reg'] = l2reg_alpha * 2 * pc_layer_dict['ws'][pci][1]
-        #
-        #     pc_layer_dict['dws'][pci] = {}
-        #     for err_sign in ['p', 'n']:
-        #         err_label = 'E' + str(i) + err_sign
-        #         # presynaptic variable :
-        #         # hebb_dict[pci]['pre'] = np.einsum('ij,ik->ijk',
-        #         #                                   pc_layer_dict['ws'][pci][1],
-        #         #                                   monitor_dict[err_label].x_trace[:, -last_t:])
-        #         hebb_dict[pci]['pre'] = monitor_dict[err_label].x_trace[:, -last_t:]
-        #         # # weight update and clamping
-        #         # hebb_val = lr_dict[pci][iter_i] * \
-        #         #            hebb_dict[pci]['post'].mean(axis=2).T * \
-        #         #            hebb_dict[pci]['pre'].mean(axis=2) * \
-        #         #            hebb_dict[pci]['res']
-        #         #
-        #         # if err_sign == 'p':
-        #         #     reg_sign = -1
-        #         # else:
-        #         #     reg_sign = 1
-        #         #
-        #         # pc_layer_dict['dws'][pci][err_sign] =(lr_dict[pci][iter_i] / 2) * \
-        #         #            (hebb_dict[pci]['post'].mean(axis=2).T * hebb_dict[pci]['pre'].mean(axis=2) +
-        #         #             reg_sign * hebb_dict[pci]['L1reg'])
-        #
-        #         # pc_layer_dict['dws'][pci][err_sign] = np.clip(hebb_val, -Lw_max[i]*0.5, Lw_max[i]*0.5)
-        #         # pc_layer_dict['dws'][pci][err_sign] = lr_dict[pci][iter_i] * \
-        #         #                                       (hebb_dict[pci]['post'].mean(axis=2).T *
-        #         #                                        hebb_dict[pci]['pre'].mean(axis=2) -
-        #         #                                        hebb_dict[pci]['L2reg'])
-        #         pc_layer_dict['dws'][pci][err_sign] = lr_dict[pci][iter_i] * \
-        #                                               (np.einsum('ij,kj->ikj',
-        #                                                         hebb_dict[pci]['pre'],
-        #                                                         hebb_dict[pci]['post']).mean(axis=2) - \
-        #                                               hebb_dict[pci]['L2reg'])
-        #
-        #     pc_layer_dict['ws'][pci][1] += pc_layer_dict['dws'][pci]['p'] - pc_layer_dict['dws'][pci]['n']
-        #     pc_layer_dict['ws'][pci][1] = np.clip(pc_layer_dict['ws'][pci][1], 0, inf)#Lw_max[i])
-        #
-        # # del hebb_dict
+        # WEIGHT UPDATES
+        hebb_dict = {}
+
+        for i in range(nlayerPC):
+            pci = 'PC' + str(i + 1)
+
+            # store mean errors
+            Ierror_dict = np.mean(np.abs(monitor_dict['E' + str(i) + 'p'].Ierror[:, -last_t:] / pamp), axis=1)
+            # store SSE
+            pc_layer_dict['sse'][pci][image_i, iter_i] = np.sum(Ierror_dict ** 2)
+            # pc_layer_dict['sse'][pci][iter_i * nimages + image_i + 1] = np.sum(
+            #     Ierror_dict[pci] ** 2)
+
+            hebb_dict[pci] = {}
+            # postsynaptic variable :
+            # hebb_dict[pci]['post'] = np.einsum('ij,ik->ijk',
+            #                                    pc_layer_dict['ws'][pci][1].T,
+            #                                    monitor_dict['P' + str(i + 1)].x_trace[:, -last_t:])
+            hebb_dict[pci]['post'] = monitor_dict['P' + str(i + 1)].x_trace[:, -last_t:]
+
+            # # resilience to learning hebb_dict[pci]['res'] = np.tile(Ierror_dict[pci] > dw_lim, nlayer_dict['P' +
+            # str(i + 1)]).reshape(nlayer_dict['P' + str(i + 1)], nlayer_dict['E' + str(i) + 'p']).T * 1 L1
+            # regularization error
+            # hebb_dict[pci]['L1reg'] = (Lw_max[i] / l1reg_alpha) * np.sign(pc_layer_dict['ws'][pci][1])
+            hebb_dict[pci]['L2reg'] = l2reg_alpha * 2 * pc_layer_dict['ws'][pci][1]
+
+            pc_layer_dict['dws'][pci] = {}
+            for err_sign in ['p', 'n']:
+                err_label = 'E' + str(i) + err_sign
+                # presynaptic variable :
+                # hebb_dict[pci]['pre'] = np.einsum('ij,ik->ijk',
+                #                                   pc_layer_dict['ws'][pci][1],
+                #                                   monitor_dict[err_label].x_trace[:, -last_t:])
+                hebb_dict[pci]['pre'] = monitor_dict[err_label].x_trace[:, -last_t:]
+                # # weight update and clamping
+                # hebb_val = lr_dict[pci][iter_i] * \
+                #            hebb_dict[pci]['post'].mean(axis=2).T * \
+                #            hebb_dict[pci]['pre'].mean(axis=2) * \
+                #            hebb_dict[pci]['res']
+                #
+                # if err_sign == 'p':
+                #     reg_sign = -1
+                # else:
+                #     reg_sign = 1
+                #
+                # pc_layer_dict['dws'][pci][err_sign] =(lr_dict[pci][iter_i] / 2) * \
+                #            (hebb_dict[pci]['post'].mean(axis=2).T * hebb_dict[pci]['pre'].mean(axis=2) +
+                #             reg_sign * hebb_dict[pci]['L1reg'])
+
+                # pc_layer_dict['dws'][pci][err_sign] = np.clip(hebb_val, -Lw_max[i]*0.5, Lw_max[i]*0.5)
+                # pc_layer_dict['dws'][pci][err_sign] = lr_dict[pci][iter_i] * \
+                #                                       (hebb_dict[pci]['post'].mean(axis=2).T *
+                #                                        hebb_dict[pci]['pre'].mean(axis=2) -
+                #                                        hebb_dict[pci]['L2reg'])
+                pc_layer_dict['dws'][pci][err_sign] = lr_dict[pci][iter_i] * \
+                                                      (np.einsum('ij,kj->ikj',
+                                                                hebb_dict[pci]['pre'],
+                                                                hebb_dict[pci]['post']).mean(axis=2) - \
+                                                      hebb_dict[pci]['L2reg'])
+
+            pc_layer_dict['ws'][pci][1] += pc_layer_dict['dws'][pci]['p'] - pc_layer_dict['dws'][pci]['n']
+            pc_layer_dict['ws'][pci][1] = np.clip(pc_layer_dict['ws'][pci][1], 0, inf)#Lw_max[i])
+
+        # del hebb_dict
 
         if ((iter_i + 1) % nPR == 0) or (iter_i == 0):
 

@@ -1,7 +1,7 @@
-import tensorflow as tf
 import numpy as np
-import matplotlib.pyplot as plt
-import time
+import tensorflow as tf
+
+# import time
 
 AdEx = {
     't_ref': 2 * 10 ** (-3),  # ms
@@ -28,10 +28,10 @@ sim_dur = 1000 * 10 ** (-3)  # ms
 dt = 1 * 10 ** (-3)  # ms
 num_neurons = 100
 # Iext = 1200 * 10 ** -12  # pamp
-Iext = tf.random.normal(shape=(num_neurons,),
-                        mean=1500 * 10 ** -12, stddev=500 * 10 ** -12,
-                        dtype=tf.float32,
-                        name='external current')
+# Iext = tf.random.normal(shape=(num_neurons,),
+#                         mean=1500 * 10 ** -12, stddev=500 * 10 ** -12,
+#                         dtype=tf.float64,
+#                         name='external current')
 time_steps = int(sim_dur / dt) + 1
 
 
@@ -39,14 +39,14 @@ time_steps = int(sim_dur / dt) + 1
 # code_start = time.time()
 #
 # # internal variables
-# v = tf.Variable(tf.ones(shape=num_neurons, dtype=tf.float32) * AdEx['EL'], name='membrane potential')
-# c = tf.Variable(tf.zeros(shape=num_neurons, dtype=tf.float32), name='adaptation variable')
+# v = tf.Variable(tf.ones(shape=num_neurons, dtype=tf.float64) * AdEx['EL'], name='membrane potential')
+# c = tf.Variable(tf.zeros(shape=num_neurons, dtype=tf.float64), name='adaptation variable')
 # ref = tf.Variable(tf.zeros(shape=num_neurons, dtype=tf.int32))
 # # pre-synaptic variables
-# x = tf.Variable(tf.zeros(shape=num_neurons, dtype=tf.float32), name='spike variable')
-# x_tr = tf.Variable(tf.zeros(shape=num_neurons, dtype=tf.float32), name='pre-synaptic spike trace')
+# x = tf.Variable(tf.zeros(shape=num_neurons, dtype=tf.float64), name='spike variable')
+# x_tr = tf.Variable(tf.zeros(shape=num_neurons, dtype=tf.float64), name='pre-synaptic spike trace')
 # # post-synaptic variable
-# Isyn = tf.Variable(tf.zeros(shape=num_neurons, dtype=tf.float32), name='post-synaptic current')
+# Isyn = tf.Variable(tf.zeros(shape=num_neurons, dtype=tf.float64), name='post-synaptic current')
 # fired = tf.Variable(tf.zeros(shape=num_neurons, dtype=tf.bool))
 #
 #
@@ -81,11 +81,11 @@ time_steps = int(sim_dur / dt) + 1
 #     ref_op = tf.greater(ref, 0)
 #     v_ref = tf.where(ref_op, AdEx['EL'], v)
 #     if t < 200:
-#         Isyn.assign(tf.zeros(num_neurons, dtype=tf.float32))
+#         Isyn.assign(tf.zeros(num_neurons, dtype=tf.float64))
 #     elif 200 <= t < 800:
 #         Isyn.assign(Iext)
 #     elif t >= 800:
-#         Isyn.assign(tf.zeros(num_neurons, dtype=tf.float32))
+#         Isyn.assign(tf.zeros(num_neurons, dtype=tf.float64))
 #
 #     # compute changes
 #     dv = tf.where(ref_op, 0.0, tf_dvdt(v_ref, c, Isyn))
@@ -121,14 +121,14 @@ time_steps = int(sim_dur / dt) + 1
 #  <<<<<< initialize with (n x t) tensor >>>>>>>
 #
 # # internal variables
-# v = tf.Variable(tf.ones(shape=(num_neurons, time_steps), dtype=tf.float32) * AdEx['EL'], name='membrane potential')
-# c = tf.Variable(tf.zeros(shape=(num_neurons, time_steps), dtype=tf.float32), name='adaptation variable')
+# v = tf.Variable(tf.ones(shape=(num_neurons, time_steps), dtype=tf.float64) * AdEx['EL'], name='membrane potential')
+# c = tf.Variable(tf.zeros(shape=(num_neurons, time_steps), dtype=tf.float64), name='adaptation variable')
 # ref = tf.Variable(tf.zeros(shape=num_neurons, dtype=tf.int32))
 # # pre-synaptic variables
-# x = tf.Variable(tf.zeros(shape=(num_neurons, time_steps), dtype=tf.float32), name='spike variable')
-# x_tr = tf.Variable(tf.zeros(shape=(num_neurons, time_steps), dtype=tf.float32), name='pre-synaptic spike trace')
+# x = tf.Variable(tf.zeros(shape=(num_neurons, time_steps), dtype=tf.float64), name='spike variable')
+# x_tr = tf.Variable(tf.zeros(shape=(num_neurons, time_steps), dtype=tf.float64), name='pre-synaptic spike trace')
 # # post-synaptic variable
-# Isyn = tf.Variable(tf.zeros(shape=(num_neurons, time_steps), dtype=tf.float32), name='post-synaptic current')
+# Isyn = tf.Variable(tf.zeros(shape=(num_neurons, time_steps), dtype=tf.float64), name='post-synaptic current')
 # fired = tf.Variable(tf.zeros(shape=(num_neurons, time_steps), dtype=tf.bool))
 #
 # for t in range(time_steps - 1):
@@ -136,11 +136,11 @@ time_steps = int(sim_dur / dt) + 1
 #     ref_op = tf.greater(ref, 0)
 #     v_ref = tf.where(ref_op, AdEx['EL'], v[:, t])
 #     if t < 200:
-#         Isyn[:, t].assign(tf.zeros(num_neurons, dtype=tf.float32))
+#         Isyn[:, t].assign(tf.zeros(num_neurons, dtype=tf.float64))
 #     elif 200 <= t < 800:
 #         Isyn[:, t].assign(Iext)
 #     elif t >= 800:
-#         Isyn[:, t].assign(tf.zeros(num_neurons, dtype=tf.float32))
+#         Isyn[:, t].assign(tf.zeros(num_neurons, dtype=tf.float64))
 #
 #     # compute changes
 #     dv = tf.where(ref_op, 0.0, tf_dvdt(v_ref, c[:, t], Isyn[:, t]))
@@ -165,121 +165,174 @@ time_steps = int(sim_dur / dt) + 1
 # A basic LIF neuron
 class AdEx_Layer(object):
 
-    def __init__(self, neuron_model_constants, n_neuron, dt):
+    def __init__(self, neuron_model_constants, n_layers, n_neuron, dt, Iext):
+        """
+
+        :param neuron_model_constants: dict
+        :param n_layers: int
+        :param n_neuron: list
+        :param dt: float
+        :param Iext: float, list, or array
+        """
+
         for key in neuron_model_constants:
             setattr(self, key, neuron_model_constants[key])
 
+        # network architecture
+        self.num_layers = n_layers
         self.num_neurons = n_neuron
+
+        # simulation parameters
         self.dt = dt
+        self._step = 0
 
         # internal variables
-        self.v = tf.Variable(tf.ones(self.num_neurons, dtype=tf.float32) * self.EL)
-        self.c = tf.Variable(tf.zeros(self.num_neurons, dtype=tf.float32))
-        self.ref = tf.Variable(tf.zeros(self.num_neurons, dtype=tf.int32))
+        self.n_variable = sum(self.num_neurons)
+        self.v = tf.Variable(tf.ones(self.n_variable, dtype=tf.float64) * self.EL)
+        self.c = tf.Variable(tf.zeros(self.n_variable, dtype=tf.float64))
+        self.ref = tf.Variable(tf.zeros(self.n_variable, dtype=tf.int32))
         # pre-synaptic variables
-        self.x = tf.Variable(tf.zeros(self.num_neurons, dtype=tf.float32))
-        self.x_tr = tf.Variable(tf.zeros(self.num_neurons, dtype=tf.float32))
+        self.x = tf.Variable(tf.zeros(self.n_variable, dtype=tf.float64))
+        self.x_tr = tf.Variable(tf.zeros(self.n_variable, dtype=tf.float64))
         # post-synaptic variable
-        self.Isyn = tf.Variable(tf.zeros(self.num_neurons, dtype=tf.float32))
-        self.fired = tf.Variable(tf.zeros(self.num_neurons, dtype=tf.bool))
+        self.Isyn = tf.Variable(tf.zeros(self.n_variable, dtype=tf.float64))
+        self.fired = tf.Variable(tf.zeros(self.n_variable, dtype=tf.bool))
 
-        # # over time
-        # self.spikes = []
+        self.conn_mat = np.zeros((self.n_variable, self.n_variable))
 
-    def __call__(self, I_ext):  # sim_duration, I_ext, w_matrix):
+        # constant weight
+        self.w_const = 550 * 10 ** -12
 
-        # self.sim_dur = sim_duration
-        # self.timestep = int(sim_duration / self.dt)
+        # feed external corrent to the first layer
+        Iext_np = np.zeros(self.n_variable)
+        Iext_np[:self.num_neurons[0]] = Iext
+        self.Iext = tf.convert_to_tensor(Iext_np)
 
-        # self.w = w_matrix
+    def __call__(self, I_ext):
 
-        self.update_var(I_ext)
+        self.update_var()
 
-        return self.fired
+        self._step += 1
 
-    def update_var(self, I_ext):
-        # for t in range(self.timestep - 1):
-        self.Isyn = I_ext
+        return self.fired.numpy()
+
+    def update_var(self):
+
+        if self._step == 799:
+
+            self.Isyn_pre = tf.Variable(tf.zeros(self.n_variable, dtype=tf.float64))
+            self.Isyn_post = tf.Variable(tf.zeros(self.n_variable, dtype=tf.float64))
+
+        elif self._step >= 800:
+            self.Isyn_pre += self.Isyn
+
+        # feed synaptic current to higher layers
+        self.update_Isyn()
 
         ref_constraint = tf.greater(self.ref, 0)
         self.v = tf.where(ref_constraint, self.EL, self.v)
 
-        # if t < 200:
-        #     self.Isyn = tf.zeros(self.num_neurons, dtype=tf.float32)
-        # elif 200 <= t < 800:
-        #     self.Isyn = I_ext
-        # elif t >= 800:
-        #     self.Isyn = tf.zeros(self.num_neurons, dtype=tf.float32)
-
-        # # compute changes
-        # dv = tf.where(self.ref, 0.0, dvdt(self.v))
-        # dc = tf.where(self.ref, self.b], dcdt(self.v, self.c))
-        # dx = tf.where(self.ref, - self.x_reset], dxdt(self.x))
-        # dxtr = tf_dxtrdt(self.x, self.x_tr)
-        #
-        # update variables
-        # self.c.assign(tf.add(self.c, dc))
-        # self.x.assign(tf.add(self.x, dx))
-        # self.x_tr.assign(tf.add(self.x_tr, self.dxtr))
-        # self.v.assign(tf.add(self.v, dv))
-        self.update_v(ref_constraint)
-        self.update_c(ref_constraint)
-        self.update_x(ref_constraint)
-        self.update_xtr()
+        self.v = self.update_v(ref_constraint)
+        self.c = self.update_c(ref_constraint)
+        self.x = self.update_x(ref_constraint)
+        self.x_tr = self.update_xtr()
 
         # subtract one time step (1) from refractory vector
-        # self.ref.assign(tf.maximum(tf.subtract(self.ref, 1), 0))
         self.ref = tf.maximum(tf.subtract(self.ref, 1), 0)
 
         # update spike monitor (fired: dtype=bool): if fired = True, else = False
-        # self.fired.assign(tf.greater_equal(self.v, self.VT))
         self.fired = tf.greater_equal(self.v, self.VT)
         # update refractory vector : if fired = 2, else = 0
-        self.ref.assign_add(tf.where(self.fired, int(self.t_ref / self.dt), 0))
-
-        # self.spikes.append(self.fired.numpy())
-
-        # self.spikes = tf.stack(self.spikes)
+        self.ref = tf.add(self.ref, tf.where(self.fired, int(self.t_ref / self.dt), 0))
 
     def update_v(self, ref_constraint):
         dv = (self.dt / self.Cm) * (self.gL * (self.EL - self.v) +
                                     self.gL * self.DeltaT * tf.exp((self.v - self.VT) / self.DeltaT) +
                                     self.Isyn - self.c)
-        # dv_func = tf.function(dv)
-        # dv_ref = tf.where(self.ref, 0.0, dv_func(self.v))
+
         dv_ref = tf.where(ref_constraint, 0.0, dv)
         return tf.add(self.v, dv_ref)
 
     def update_c(self, ref_constraint):
         dc = (self.dt / self.tauw) * (self.a * (self.v - self.EL) - self.c)
-        # dc_func = tf.function(dc)
-        # dc_ref = tf.where(self.ref, 0.0, dc_func(self.c))
         dc_ref = tf.where(ref_constraint, 0.0, dc)
         return tf.add(self.c, dc_ref)
 
     def update_x(self, ref_constraint):
         dx = self.dt * (-self.x / self.tau_rise)
-        # dx_func = tf.function(dx)
-        # dx_ref = tf.where(self.ref, 0.0, dx_func(self.x))
         dx_ref = tf.where(ref_constraint, 0.0, dx)
         return tf.add(self.x, dx_ref)
 
     def update_xtr(self):
-        dxtr = self.dt * (-self.x / self.tau_rise - self.x_tr / self.tau_s)
-        # dxtr_func = tf.function(dxtr)
-        # return tf.add(self.xtr, dxtr_func(dxtr))
+        dxtr = self.dt * (-self.x / self.tau_rise - self.x_tr / self.tau_s) * self.w_const
         return tf.add(self.x_tr, dxtr)
+
+    def update_Isyn(self):
+        # return tf.add(tf.einsum('nm,m->n', self.w, self.x_tr), self.Iext)
+        return tf.add(self.w @ self.x_tr, self.Iext)
+
+    def get_current_timestep(self):
+        return self._step * self.dt
+
+    def connect_reset(self):
+        self.conn_mat = np.zeros((self.n_variable, self.n_variable))
+
+    def connect_by_layer(self, source, target, conn_type='FC'):
+        source_idx = sum(self.num_neurons[:source - 1])
+        target_idx = sum(self.num_neurons[:target - 1])
+        if conn_type == 'FC':
+            self.conn_mat[source_idx: source_idx + self.num_neurons[source - 1],
+                target_idx: target_idx + self.num_neurons[target - 1]] = 1
+        elif conn_type == 'one-to-one':
+            self.conn_mat[source_idx: source_idx + self.num_neurons[source - 1],
+                target_idx: target_idx + self.num_neurons[target - 1]] = np.identity(self.num_neurons[source - 1])
+
+    def connect_fc_all(self):
+        connect_fully = [self.connect(i, j) for i in range(1, 5) for j in range(1, 5) if i != j]
+
+    def initialize_weight(self):
+        np_weights = np.zeros(self.conn_mat.shape)
+        for i in range(self.num_layers - 1):
+            pre_begin, pre_end = (sum(self.num_neurons[:i]), sum(self.num_neurons[:i + 1]))
+            post_begin, post_end = (sum(self.num_neurons[:i + 1]), sum(self.num_neurons[:i + 2]))
+
+            np_weights[pre_begin:pre_end, post_begin:post_end] = np.random.normal(1.0, 1.0, (
+                self.num_neurons[i], self.num_neurons[i + 1])) * self.conn_mat[pre_begin:pre_end, post_begin:post_end]
+            np_weights[post_begin:post_end, pre_begin:pre_end] = np_weights[pre_begin:pre_end, post_begin:post_end].T
+
+        self.w = tf.convert_to_tensor(np_weights)
+
+        # self.w = tf.Variable(tf.where(tf.convert_to_tensor(self.conn_mat.astype(bool)),
+        #                               tf.random.normal(self.conn_mat.shape, 1.0, 1.0),
+        #                               0.0))
+
+    # def weight_update(self):
+    #     self.Isyn_pre = tf.Variable(tf.zeros(self.n_variable, dtype=tf.float64))
+    #     self.Isyn_post = tf.Variable(tf.zeros(self.n_variable, dtype=tf.float64))
 
 
 adex_01 = AdEx_Layer(neuron_model_constants=AdEx,
-                     n_neuron=num_neurons,
-                     dt=dt)
+                     n_layers=15,
+                     n_neuron=[3, 3],
+                     dt=dt,
+                     Iext=np.random.normal(loc=1500 * 10 ** -12, scale=500 * 10 ** -12, size=3))
 
-ext_current = tf.random.normal(shape=(num_neurons,),
-                               mean=1500 * 10 ** -12, stddev=500 * 10 ** -12,
-                               dtype=tf.float32,
-                               name='external current')
-adex_01(ext_current)
+# ext_current = tf.random.normal(shape=(num_neurons,),
+#                                mean=1500 * 10 ** -12, stddev=500 * 10 ** -12,
+#                                dtype=tf.float64,
+#                                name='external current')
+# ext_current = tf.range(0, 1600, 1600/100, dtype=tf.float64) * 10 ** -12
+
+# frs = []
+# for ti in range(time_steps):
+#     frs.append(adex_01(ext_current))
+#
+# frs = tf.convert_to_tensor(frs)
+# # print (tf.reduce_sum(tf.cast(frs, tf.int32), axis=0))
+# plt.scatter(ext_current.numpy(), tf.reduce_sum(tf.cast(frs, tf.int32), axis=0).numpy())
+# plt.show()
+
+
 # wsyn = 550 * 10 ** -12
 # n_neuron = 32
 # nlayers = 2

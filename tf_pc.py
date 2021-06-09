@@ -48,30 +48,31 @@ def dxdt(xt):
 def dxtrdt(xt, xtrt):
     return dt * (-xt / AdEx['tau_rise'] - xtrt / AdEx['tau_s'])
 
+
 tf_dvdt = tf.function(dvdt)
 tf_dcdt = tf.function(dcdt)
 tf_dxdt = tf.function(dxdt)
 tf_dxtrdt = tf.function(dxtrdt)
+
 
 class testLayer(tf.keras.layers.Layer):
     def __init__(self, n_neuron):
         super(testLayer, self).__init__()
 
         self.n_neuron = n_neuron
-        self.time_step = t
+        self.time_step = dt
 
         self.v = tf.Variable(tf.ones(shape=(n_neuron,), dtype=tf.float32) * AdEx['EL'], name='membrane potential',
                              trainable='False')
         self.c = tf.Variable(tf.zeros(shape=(n_neuron,), dtype=tf.float32), name='adaptation variable',
                              trainable='False')
         self.ref = tf.Variable(tf.zeros(shape=n_neuron, dtype=tf.int32),
-                             trainable='False')
+                               trainable='False')
 
     def call(self):
         for ti in range(self.time_step - 1):
             ref_op = tf.greater(ref, 0)
             v_ref = tf.where(ref_op, AdEx['EL'], v[:, ti])
-
 
 
 # Define Sequential model with 3 layers
