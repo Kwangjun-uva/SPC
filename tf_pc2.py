@@ -1,7 +1,12 @@
 import numpy as np
 import tensorflow as tf
-
+import matplotlib.pyplot as plt
 # import time
+
+##List all your physical GPUs
+gpus = tf.config.experimental.list_physical_devices('GPU')
+for gpu in gpus:
+    tf.config.experimental.set_memory_growth(gpu, True)
 
 AdEx = {
     't_ref': 2 * 10 ** (-3),  # ms
@@ -165,7 +170,7 @@ time_steps = int(sim_dur / dt) + 1
 # A basic LIF neuron
 class AdEx_Layer(object):
 
-    def __init__(self, neuron_model_constants, n_layers, n_neuron, dt, Iext):
+    def __init__(self, neuron_model_constants, n_layers, n_neuron):
         """
 
         :param neuron_model_constants: dict
@@ -182,10 +187,6 @@ class AdEx_Layer(object):
         self.num_layers = n_layers
         self.num_neurons = n_neuron
 
-        # simulation parameters
-        self.dt = dt
-        self._step = 0
-
         # internal variables
         self.n_variable = sum(self.num_neurons)
         self.v = tf.Variable(tf.ones(self.n_variable, dtype=tf.float64) * self.EL)
@@ -201,33 +202,55 @@ class AdEx_Layer(object):
         self.conn_mat = np.zeros((self.n_variable, self.n_variable))
 
         # constant weight
-        self.w_const = 550 * 10 ** -12
+        self.w_const = 550
+
+        # weight update
+        self.w = None
+        self.w_init = None
+        # self.Isyn_pre = None
+        # self.Isyn_post = None
+
+    def __call__(self, sim_duration, time_step, I_ext):
+
+        # simulation parameters
+        self.T = sim_duration
+        self.dt = time_step
+        self._step = 0
 
         # feed external corrent to the first layer
-        Iext_np = np.zeros(self.n_variable)
-        Iext_np[:self.num_neurons[0]] = Iext
-        self.Iext = tf.convert_to_tensor(Iext_np)
+        self.Iext = self.create_Iext(I_ext)
 
-    def __call__(self, I_ext):
-
-        self.update_var()
+        # # prepare for weight update
+        # if self._step == (self.T / self.dt) - 202:
+        #
+        #     self.Isyn_pre = tf.Variable(tf.zeros(self.n_variable, dtype=tf.float64))
+        #     self.Isyn_post = tf.Variable(tf.zeros(self.n_variable, dtype=tf.float64))
+        #
+        # elif self._step >= 800:
+        #     self.Isyn_pre += self.Isyn
+        vs = []
+        for t in range(int(self.T/self.dt)):
+            self.update_var()
+            # self.update_Isyn()
+            self.update_weight()
+            vs.append(self.c.numpy())
 
         self._step += 1
 
-        return self.fired.numpy()
+        return vs
+        # return self.fired.numpy()
+
+    def create_Iext(self, Iext):
+
+        Iext_np = np.zeros(self.n_variable)
+        Iext_np[:self.num_neurons[0]] = Iext
+
+        return tf.constant(Iext_np)
 
     def update_var(self):
 
-        if self._step == 799:
-
-            self.Isyn_pre = tf.Variable(tf.zeros(self.n_variable, dtype=tf.float64))
-            self.Isyn_post = tf.Variable(tf.zeros(self.n_variable, dtype=tf.float64))
-
-        elif self._step >= 800:
-            self.Isyn_pre += self.Isyn
-
         # feed synaptic current to higher layers
-        self.update_Isyn()
+        self.Isyn = self.update_Isyn()
 
         ref_constraint = tf.greater(self.ref, 0)
         self.v = tf.where(ref_constraint, self.EL, self.v)
@@ -245,11 +268,14 @@ class AdEx_Layer(object):
         # update refractory vector : if fired = 2, else = 0
         self.ref = tf.add(self.ref, tf.where(self.fired, int(self.t_ref / self.dt), 0))
 
+        # save Isyn
+
+        # return
+
     def update_v(self, ref_constraint):
         dv = (self.dt / self.Cm) * (self.gL * (self.EL - self.v) +
                                     self.gL * self.DeltaT * tf.exp((self.v - self.VT) / self.DeltaT) +
                                     self.Isyn - self.c)
-
         dv_ref = tf.where(ref_constraint, 0.0, dv)
         return tf.add(self.v, dv_ref)
 
@@ -269,7 +295,10 @@ class AdEx_Layer(object):
 
     def update_Isyn(self):
         # return tf.add(tf.einsum('nm,m->n', self.w, self.x_tr), self.Iext)
-        return tf.add(self.w @ self.x_tr, self.Iext)
+        test01 = tf.tensordot(self.w, self.x_tr, 1)
+        test02 = test01 + self.Iext
+        return test02
+        # return tf.add(self.w @ tf.reshape(self.x_tr, (self.num_neurons, 1)), self.Iext)
 
     def get_current_timestep(self):
         return self._step * self.dt
@@ -280,15 +309,17 @@ class AdEx_Layer(object):
     def connect_by_layer(self, source, target, conn_type='FC'):
         source_idx = sum(self.num_neurons[:source - 1])
         target_idx = sum(self.num_neurons[:target - 1])
-        if conn_type == 'FC':
-            self.conn_mat[source_idx: source_idx + self.num_neurons[source - 1],
-                target_idx: target_idx + self.num_neurons[target - 1]] = 1
-        elif conn_type == 'one-to-one':
-            self.conn_mat[source_idx: source_idx + self.num_neurons[source - 1],
-                target_idx: target_idx + self.num_neurons[target - 1]] = np.identity(self.num_neurons[source - 1])
 
-    def connect_fc_all(self):
-        connect_fully = [self.connect(i, j) for i in range(1, 5) for j in range(1, 5) if i != j]
+        n_source = self.num_neurons[source - 1]
+        n_target = self.num_neurons[target - 1]
+
+        if conn_type == 'FC':
+            self.conn_mat[source_idx: source_idx + n_source, target_idx: target_idx + n_target] = 1
+        elif conn_type == 'one-to-one':
+            self.conn_mat[source_idx: source_idx + n_source, target_idx: target_idx + n_target] = np.identity(n_target)
+
+    # def connect_fc_all(self):
+    #     [self.connect_by_layer(i, j) for i in range(1, 5) for j in range(1, 5) if i != j]
 
     def initialize_weight(self):
         np_weights = np.zeros(self.conn_mat.shape)
@@ -300,22 +331,43 @@ class AdEx_Layer(object):
                 self.num_neurons[i], self.num_neurons[i + 1])) * self.conn_mat[pre_begin:pre_end, post_begin:post_end]
             np_weights[post_begin:post_end, pre_begin:pre_end] = np_weights[pre_begin:pre_end, post_begin:post_end].T
 
-        self.w = tf.convert_to_tensor(np_weights)
+        self.w = tf.Variable(np_weights)
+        self.w_init = tf.Variable(np_weights)
 
-        # self.w = tf.Variable(tf.where(tf.convert_to_tensor(self.conn_mat.astype(bool)),
-        #                               tf.random.normal(self.conn_mat.shape, 1.0, 1.0),
-        #                               0.0))
+    def update_weight(self):
 
-    # def weight_update(self):
-    #     self.Isyn_pre = tf.Variable(tf.zeros(self.n_variable, dtype=tf.float64))
-    #     self.Isyn_post = tf.Variable(tf.zeros(self.n_variable, dtype=tf.float64))
+        for layer_i in range(self.num_layers - 1):
+
+            pre_begin, pre_end = (sum(self.num_neurons[:layer_i]), sum(self.num_neurons[:layer_i + 1]))
+            post_begin, post_end = (sum(self.num_neurons[:layer_i + 1]), sum(self.num_neurons[:layer_i + 2]))
+
+            w_l = tf.slice(self.w, [pre_begin, post_begin], [pre_end-pre_begin, post_end-post_begin])
+            xtr_l = tf.reshape(tf.slice(self.x_tr, [layer_i], [pre_end-pre_begin]), (pre_end-pre_begin, 1))
+            xtr_nl = tf.reshape(tf.slice(self.x_tr, [layer_i+1], [post_end - post_begin]), (post_end - post_begin, 1))
+            pre_isyn = w_l * xtr_l
+            post_isyn = tf.transpose(w_l) * xtr_nl
+            dw = pre_isyn * tf.transpose(post_isyn)
+
+            self.w[pre_begin:pre_end, post_begin:post_end].assign(tf.add(w_l, dw))
 
 
+ext_current = 1500 * 10 ** -12
 adex_01 = AdEx_Layer(neuron_model_constants=AdEx,
-                     n_layers=15,
-                     n_neuron=[3, 3],
-                     dt=dt,
-                     Iext=np.random.normal(loc=1500 * 10 ** -12, scale=500 * 10 ** -12, size=3))
+                     n_layers=3,
+                     n_neuron=[2, 3, 2])
+adex_01.connect_by_layer(1, 2)
+adex_01.connect_by_layer(2, 1)
+adex_01.connect_by_layer(2, 3)
+adex_01.connect_by_layer(3, 2)
+adex_01.initialize_weight()
+vvs = np.asarray(adex_01(1.0, 0.001, ext_current))
+
+plt.figure()
+for i in range(7):
+    plt.subplot(7,1,i+1)
+    plt.plot(vvs[:,i])
+plt.show()
+
 
 # ext_current = tf.random.normal(shape=(num_neurons,),
 #                                mean=1500 * 10 ** -12, stddev=500 * 10 ** -12,
