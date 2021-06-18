@@ -68,7 +68,8 @@ class AdEx_Layer(object):
         self.np_weights = np.zeros(self.conn_mat.shape)
 
         # constant weight
-        self.w_const = 550 * 10 ** -12
+        # self.w_const = 550 * 10 ** -12
+        self.w_const = 500 * 10 ** -12
 
         # weight update
         self.l_time = None
@@ -91,6 +92,7 @@ class AdEx_Layer(object):
 
         # self.fs = tf.Variable(tf.zeros(sum(self.num_neurons), dtype=tf.int64))
         self.fr = tf.Variable(tf.zeros([self.n_variable, ], dtype=tf.float64))
+        self.x_trace = tf.Variable(tf.zeros([self.n_variable, ], dtype=tf.float64))
 
         for t in range(int(self.T / self.dt)):
             # update internal variables (v, c, x, x_tr)
@@ -106,6 +108,7 @@ class AdEx_Layer(object):
             self._step += 1
 
         self.fr.assign(self.fr / self._step)
+        self.x_trace.assign(self.xtr_record)
 
     def create_Iext(self, Iext):
 
@@ -154,12 +157,12 @@ class AdEx_Layer(object):
         return tf.where(constraint, -self.x_reset, tf.add(self.x, dx))
 
     def update_xtr(self):
-        dxtr = self.dt * (-self.x / self.tau_rise - self.x_tr / self.tau_s) * self.w_const
+        dxtr = self.dt * (-self.x / self.tau_rise - self.x_tr / self.tau_s)
         return tf.add(self.x_tr, dxtr)
 
     def update_Isyn(self):
         # return tf.tensordot(tf.transpose(self.w * self.conn_mat), self.x_tr, 1) + self.Iext
-        return tf.tensordot(tf.transpose(self.w), self.x_tr, 1) + self.Iext
+        return tf.tensordot(tf.transpose(self.w), self.x_tr * self.w_const, 1) + self.Iext
 
     def get_current_timestep(self):
         return self._step * self.dt
@@ -188,11 +191,16 @@ class AdEx_Layer(object):
             if constant == True:
                 self.np_weights[source_begin:source_end, target_begin:target_end] = one_to_one_conn
 
-    def randomize_weights(self, source, target, symmetric=False, sym_syn_type='exc', target_w=None, target_sym_syn_type='inh'):
+    def randomize_weights(self, source, target, symmetric=False, sym_syn_type='exc', target_w=None,
+                          target_sym_syn_type='inh'):
 
         source_begin, source_end, target_begin, target_end = self.pre_post_idx(source, target)
-        n_target = target_end - target_begin
-        rand_weights = np.random.normal(1.5, 0.8, (self.neurons_per_group[source - 1], self.neurons_per_group[target - 1])) / n_target * self.conn_mat[source_begin:source_end, target_begin:target_end]
+        # n_target = target_end - target_begin
+        n_target = 5
+        rand_weights = np.random.normal(1.5, 0.8, (
+        self.neurons_per_group[source - 1], self.neurons_per_group[target - 1])) / n_target * self.conn_mat[
+                                                                                              source_begin:source_end,
+                                                                                              target_begin:target_end]
         self.np_weights[source_begin:source_end, target_begin:target_end] = rand_weights
 
         if symmetric:
@@ -201,7 +209,8 @@ class AdEx_Layer(object):
         if target_w:
             w_source_begin, w_source_end, w_target_begin, w_target_end = self.pre_post_idx(*target_w)
             self.np_weights[w_source_begin:w_source_end, w_target_begin:w_target_end] = rand_weights * -1
-            self.symmetric_weight(rand_weights, w_source_begin, w_source_end, w_target_begin, w_target_end, target_sym_syn_type)
+            self.symmetric_weight(rand_weights, w_source_begin, w_source_end, w_target_begin, w_target_end,
+                                  target_sym_syn_type)
 
     def symmetric_weight(self, w_mat, source_begin, source_end, target_begin, target_end, syn_type):
         w_tranpose = w_mat.T
@@ -232,9 +241,9 @@ class AdEx_Layer(object):
 
         elif self._step > int(self.T / self.dt) - int(self.l_time / self.dt):
 
-            self.xtr_record.assign_add(self.x_tr)
+            self.xtr_record.assign_add(self.x_tr * self.w_const)
 
-    def weight_update(self, source, target, lr, reg_alpha):
+    def hebbian_dw(self, source, target, lr, reg_alpha):
 
         # load indices of source and target layers
         pre_begin, pre_end, post_begin, post_end = self.pre_post_idx(source, target)
@@ -264,13 +273,16 @@ class AdEx_Layer(object):
         return dw * dw_sign
         # self.w[pre_begin:pre_end, post_begin:post_end].assign(tf.add(w_l, dw * dw_sign))
 
-    def assign_weights(self, positive_w, negative_w, dw_tensor):
+    def weight_update(self, positive_w, negative_w, dw_tensor):
         pre_begin, pre_end, post_begin, post_end = self.pre_post_idx(*positive_w)
         w_l = tf.slice(self.w, [pre_begin, post_begin], [pre_end - pre_begin, post_end - post_begin])
         new_weights = tf.maximum(tf.add(w_l, dw_tensor), 0.0)
+
+        # update weights to E+ group
         self.w[pre_begin:pre_end, post_begin:post_end].assign(new_weights)
         self.w[post_begin:post_end, pre_begin:pre_end].assign(tf.transpose(new_weights) * -1)
 
+        # update the same weights to E- group
         pre_begin, pre_end, post_begin, post_end = self.pre_post_idx(*negative_w)
         self.w[pre_begin:pre_end, post_begin:post_end].assign(new_weights * -1)
         self.w[post_begin:post_end, pre_begin:pre_end].assign(tf.transpose(new_weights))
@@ -311,10 +323,10 @@ build_end_time = time.time()
 
 # simulate
 sim_dur = 1000 * 10 ** (-3)  # ms
-dt = 1 * 10 ** (-3)  # ms
+dt = 1 * 10 ** (-4)  # ms
 learning_window = 200 * 10 ** -3
 
-iter_n = 40
+iter_n = 1
 plt.figure(figsize=(27, 27))
 
 for iter_i in range(iter_n):
@@ -323,42 +335,51 @@ for iter_i in range(iter_n):
     adex_01(sim_dur, dt, learning_window, ext_current)
 
     # update weights
+    # save current weights
     curr_w = adex_01.w.numpy()
-    dw_p = adex_01.weight_update(2, 4, 0.5, 0.025)
-    dw_n = adex_01.weight_update(3, 4, 0.5, 0.025)
-    adex_01.assign_weights([2, 4], [3, 4], tf.add(dw_p, dw_n))
+    # compute gradient
+    dw_p = adex_01.hebbian_dw(2, 4, 0.15, 0.025)
+    dw_n = adex_01.hebbian_dw(3, 4, 0.15, 0.025)
+    # update weights
+    adex_01.weight_update([2, 4], [3, 4], tf.add(dw_p, dw_n))
+    # save updated weights
     updated_w = adex_01.w.numpy()
-    if (iter_i + 1) % int(iter_n/4) == 0:
-        plt.subplot(2, 2, int((iter_i + 1) / int(iter_n/4)))
-        plt.imshow(updated_w - curr_w, cmap='bwr')
-        plt.title('{0}'.format(int((updated_w == curr_w).all())))
+    # # plot
+    # if (iter_i + 1) % int(iter_n / 4) == 0:
+    #     plt.subplot(2, 2, int((iter_i + 1) / int(iter_n / 4)))
+    #     plt.imshow(updated_w - curr_w, cmap='bwr')
+    #     plt.title('{0}'.format((updated_w == curr_w).all()))
 
     end_iter_time = time.time()
-    print('iter# {0} took {1:.2f} sec'.format(iter_i+1, end_iter_time - iter_time))
+    print('iter# {0} took {1:.2f} sec'.format(iter_i + 1, end_iter_time - iter_time))
 
-plt.show()
+# plt.show()
 end_time = time.time()
-print ('building : {0:.2f} sec\nsimulation : {1:.2f} sec\ntotal : {2:.2f} sec'.format(build_end_time - start_time,
-                                                                                      end_time - build_end_time,
-                                                                                      end_time - start_time))
+print('building : {0:.2f} sec\nsimulation : {1:.2f} sec\ntotal : {2:.2f} sec'.format(build_end_time - start_time,
+                                                                                     end_time - build_end_time,
+                                                                                     end_time - start_time))
+# # plot weight changes
+# plt.figure(figsize=(30, 10))
+# plt.subplot(131)
+# plt.imshow(adex_01.w_init.numpy())
+# plt.subplot(132)
+# plt.imshow(adex_01.w.numpy())
+# plt.subplot(133)
+# plt.imshow(adex_01.w_init.numpy() - adex_01.w.numpy())
+# plt.show()
 
-# plot weight changes
-plt.figure(figsize=(30,10))
+pamp = 10 ** -12
+original_image = tf.reshape(adex_01.Iext[:9], (3, 3)) / pamp
+reconstructed_image = tf.reshape(tf.tensordot(tf.transpose(adex_01.w[27:, 18:27]), adex_01.xtr_record[27:], 1),
+                                 (3, 3)) / pamp
+plt.figure(figsize=(15, 5))
 plt.subplot(131)
-plt.imshow(adex_01.w_init.numpy())
+original_plot = plt.imshow(original_image, cmap='Reds', vmin=0, vmax=3000)
+plt.colorbar(original_plot, shrink=0.6)
 plt.subplot(132)
-plt.imshow(adex_01.w.numpy())
+reconst_plot = plt.imshow(reconstructed_image, cmap='Reds', vmin=0, vmax=3000)
+plt.colorbar(reconst_plot, shrink=0.6)
 plt.subplot(133)
-plt.imshow(adex_01.w_init.numpy() - adex_01.w.numpy())
-plt.show()
-
-original_image = tf.reshape(adex_01.Iext[:9], (3,3)) /10**-12
-reconstructed_image = tf.reshape(tf.tensordot(tf.transpose(adex_01.w[27:, 18:27]), adex_01.xtr_record[27:],1), (3,3)) /10**-12
-plt.figure(figsize=(15,5))
-plt.subplot(131)
-plt.imshow(original_image, cmap='Reds', vmin=0, vmax=3000)
-plt.subplot(132)
-plt.imshow(reconstructed_image, cmap='Reds', vmin=0, vmax=3000)
-plt.subplot(133)
-plt.imshow(original_image - reconstructed_image, cmap='bwr', vmin=-1000, vmax=1000)
+diff_plot = plt.imshow(original_image - reconstructed_image, cmap='bwr', vmin=-1000, vmax=1000)
+plt.colorbar(diff_plot, shrink=0.6)
 plt.show()
