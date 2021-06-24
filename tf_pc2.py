@@ -68,8 +68,8 @@ class AdEx_Layer(object):
         self.np_weights = np.zeros(self.conn_mat.shape)
 
         # constant weight
-        # self.w_const = 550 * 10 ** -12
-        self.w_const = 500 * 10 ** -12
+        self.w_const = 550 * 10 ** -12
+        # self.w_const = 1 * 10 ** -12
 
         # weight update
         self.l_time = None
@@ -92,13 +92,11 @@ class AdEx_Layer(object):
 
         # self.fs = tf.Variable(tf.zeros(sum(self.num_neurons), dtype=tf.int64))
         self.fr = tf.Variable(tf.zeros([self.n_variable, ], dtype=tf.float64))
-        self.x_trace = tf.Variable(tf.zeros([self.n_variable, ], dtype=tf.float64))
+        # self.x_trace = tf.Variable(tf.zeros([self.n_variable, ], dtype=tf.float64))
 
         for t in range(int(self.T / self.dt)):
             # update internal variables (v, c, x, x_tr)
             self.update_var()
-            # update synaptic variable (Isyn = w * x_tr + Iext)
-            # self.update_Isyn()
             self.record_pre_post()
 
             # save firing rate (fs) and firing time (fr)
@@ -107,8 +105,10 @@ class AdEx_Layer(object):
 
             self._step += 1
 
+        # take the mean of synaptic output
+        self.xtr_record.assign(self.xtr_record / int(self.l_time / self.dt))
         self.fr.assign(self.fr / self._step)
-        self.x_trace.assign(self.xtr_record)
+        # self.x_trace.assign(self.xtr_record)
 
     def create_Iext(self, Iext):
 
@@ -121,6 +121,7 @@ class AdEx_Layer(object):
     def update_var(self):
 
         # feed synaptic current to higher layers
+        # update synaptic variable (Isyn = w * x_tr + Iext)
         self.Isyn = self.update_Isyn()
 
         ref_constraint = tf.greater(self.ref, 0)
@@ -128,7 +129,7 @@ class AdEx_Layer(object):
         self.ref = tf.maximum(tf.subtract(self.ref, 1), 0)
 
         self.v = tf.where(ref_constraint, self.EL, self.v)
-        self.v = self.update_v(ref_constraint)
+        self.v = tf.maximum(self.EL, self.update_v(ref_constraint))
         # update spike monitor (fired: dtype=bool): if fired = True, else = False
         self.fired = tf.greater_equal(self.v, self.VT)
 
@@ -235,11 +236,13 @@ class AdEx_Layer(object):
 
     def record_pre_post(self):
 
-        if self._step == int(self.T / self.dt) - int(self.l_time / self.dt):
+        start_learning_time = int(self.T / self.dt) - int(self.l_time / self.dt)
+
+        if self._step == start_learning_time:
 
             self.xtr_record = tf.Variable(tf.zeros(self.n_variable, dtype=tf.float64))
 
-        elif self._step > int(self.T / self.dt) - int(self.l_time / self.dt):
+        elif self._step > start_learning_time:
 
             self.xtr_record.assign_add(self.x_tr * self.w_const)
 
@@ -251,9 +254,7 @@ class AdEx_Layer(object):
         # weight btw layer i and i+1
         # w_l = tf.slice(self.w, [pre_begin, post_begin], [pre_end - pre_begin, post_end - post_begin])
         w_l = tf.slice(self.w, [pre_begin, post_begin], [pre_end - pre_begin, post_end - post_begin])
-
-        # take the mean of synaptic output
-        self.xtr_record.assign(self.xtr_record / int(self.l_time / self.dt))
+        # w_nl = tf.slice(self.w, [post_begin, pre_begin], [post_end - post_begin, pre_end - pre_begin])
 
         # synaptic current estimate from layer i to i+1
         xtr_l = tf.reshape(tf.slice(self.xtr_record, [source - 1], [pre_end - pre_begin]), (pre_end - pre_begin, 1))
@@ -265,6 +266,7 @@ class AdEx_Layer(object):
         pre_isyn = w_l * xtr_l
         # post-synaptic current from layer i+1 to i
         post_isyn = tf.transpose(w_l) * xtr_nl
+        # post_isyn = w_nl * xtr_nl
 
         # weight changes
         dw = lr * pre_isyn * tf.transpose(post_isyn) - 2 * reg_alpha * w_l
@@ -287,12 +289,15 @@ class AdEx_Layer(object):
         self.w[pre_begin:pre_end, post_begin:post_end].assign(new_weights * -1)
         self.w[post_begin:post_end, pre_begin:pre_end].assign(tf.transpose(new_weights))
 
+pamp = 10 ** -12
+
 # network parameters
 n_pc_layers = 1
 n_pred_neurons = [100]
 
 # create external input
 n_stim = 9
+# ext_current = np.arange(0, 3100, 100) * pamp
 ext_current = np.random.normal(1200.0, 200.0, (n_stim,)) * 10 ** -12
 
 start_time = time.time()
@@ -323,10 +328,10 @@ build_end_time = time.time()
 
 # simulate
 sim_dur = 1000 * 10 ** (-3)  # ms
-dt = 1 * 10 ** (-4)  # ms
+dt = 1 * 10 ** (-3)  # ms
 learning_window = 200 * 10 ** -3
 
-iter_n = 1
+iter_n = 10
 plt.figure(figsize=(27, 27))
 
 for iter_i in range(iter_n):
@@ -336,14 +341,14 @@ for iter_i in range(iter_n):
 
     # update weights
     # save current weights
-    curr_w = adex_01.w.numpy()
-    # compute gradient
-    dw_p = adex_01.hebbian_dw(2, 4, 0.15, 0.025)
-    dw_n = adex_01.hebbian_dw(3, 4, 0.15, 0.025)
+    # curr_w = adex_01.w.numpy()
+    # # compute gradient
+    dw_p = adex_01.hebbian_dw(2, 4, lr=0.25, reg_alpha=0.025)
+    dw_n = adex_01.hebbian_dw(3, 4, lr=0.25, reg_alpha=0.025)
     # update weights
     adex_01.weight_update([2, 4], [3, 4], tf.add(dw_p, dw_n))
     # save updated weights
-    updated_w = adex_01.w.numpy()
+    # updated_w = adex_01.w.numpy()
     # # plot
     # if (iter_i + 1) % int(iter_n / 4) == 0:
     #     plt.subplot(2, 2, int((iter_i + 1) / int(iter_n / 4)))
@@ -368,7 +373,6 @@ print('building : {0:.2f} sec\nsimulation : {1:.2f} sec\ntotal : {2:.2f} sec'.fo
 # plt.imshow(adex_01.w_init.numpy() - adex_01.w.numpy())
 # plt.show()
 
-pamp = 10 ** -12
 original_image = tf.reshape(adex_01.Iext[:9], (3, 3)) / pamp
 reconstructed_image = tf.reshape(tf.tensordot(tf.transpose(adex_01.w[27:, 18:27]), adex_01.xtr_record[27:], 1),
                                  (3, 3)) / pamp
