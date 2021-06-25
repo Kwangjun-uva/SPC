@@ -4,10 +4,10 @@ import matplotlib.pyplot as plt
 import time
 from create_33images import create_shapes, plot_imgset
 
-# # List all your physical GPUs
-# gpus = tf.config.experimental.list_physical_devices('GPU')
-# for gpu in gpus:
-#     tf.config.experimental.set_memory_growth(gpu, True)
+# List all your physical GPUs
+gpus = tf.config.experimental.list_physical_devices('GPU')
+for gpu in gpus:
+    tf.config.experimental.set_memory_growth(gpu, True)
 
 AdEx = {
     't_ref': 2 * 10 ** (-3),  # ms
@@ -295,7 +295,7 @@ class AdEx_Layer(object):
 
         # weight changes
         # dw_all = lr * pre_isyn * tf.transpose(post_isyn) - 2 * reg_alpha * tf.abs(w_l)
-        dw_all = lr * tf.einsum('ij,jk->jik', xtr_l, xtr_nl)
+        dw_all = lr * tf.einsum('ij,jk->jik', xtr_l/ 10 ** -12, xtr_nl/ 10 ** -12)
         # dw_all = lr * pre_isyn * post_isyn - 2 * reg_alpha * tf.abs(w_l)
         dw_mean = tf.reduce_mean(dw_all, axis=0) - 2 * reg_alpha * tf.abs(w_l)
         # update weights
@@ -370,11 +370,11 @@ adex_01.initialize_weight()
 build_end_time = time.time()
 
 # simulate
-sim_dur = 1000 * 10 ** (-3)  # ms
+sim_dur = 500 * 10 ** (-3)  # ms
 dt = 1 * 10 ** (-4)  # ms
 learning_window = 200 * 10 ** -3
 
-n_epoch = 5
+n_epoch = 10
 # iter_n = n_shape
 # sse = []
 
@@ -387,8 +387,8 @@ for epoch_i in range(n_epoch):
 
         # update weights
         # compute gradient
-        dw_p = adex_01.hebbian_dw(2, 4, 0.0000025, 0.00001)
-        dw_n = adex_01.hebbian_dw(3, 4, 0.0000025, 0.00001)
+        dw_p = adex_01.hebbian_dw(2, 4, 0.0000001, 0.000001)
+        dw_n = adex_01.hebbian_dw(3, 4, 0.0000001, 0.000001)
         # update weight
         adex_01.weight_update([2, 4], [3, 4], tf.add(dw_p, dw_n))
 
