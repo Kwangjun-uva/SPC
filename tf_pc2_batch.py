@@ -33,7 +33,7 @@ AdEx = {
 # A basic adex LIF neuron
 class AdEx_Layer(object):
 
-    def __init__(self, neuron_model_constants, n_pc_layers, n_pred_neurons, n_stim):  # n_layers, n_neuron):
+    def __init__(self, neuron_model_constants, n_pc_layers, n_pred_neurons, n_stim, n_batch):  # n_layers, n_neuron):
         """
         :param neuron_model_constants: dict
         :param n_pc_layers: int
@@ -53,16 +53,17 @@ class AdEx_Layer(object):
 
         # internal variables
         # self.n_variable = sum(self.num_neurons)
+        self.n_batch = n_batch
         self.n_variable = sum(self.neurons_per_group)
-        self.v = tf.Variable(tf.ones(self.n_variable, dtype=tf.float64) * self.EL)
-        self.c = tf.Variable(tf.zeros(self.n_variable, dtype=tf.float64))
-        self.ref = tf.Variable(tf.zeros(self.n_variable, dtype=tf.int32))
+        self.v = tf.Variable(tf.ones([self.n_variable, self.n_batch], dtype=tf.float64) * self.EL)
+        self.c = tf.Variable(tf.zeros([self.n_variable, self.n_batch], dtype=tf.float64))
+        self.ref = tf.Variable(tf.zeros([self.n_variable, self.n_batch], dtype=tf.int32))
         # pre-synaptic variables
-        self.x = tf.Variable(tf.zeros(self.n_variable, dtype=tf.float64))
-        self.x_tr = tf.Variable(tf.zeros(self.n_variable, dtype=tf.float64))
+        self.x = tf.Variable(tf.zeros([self.n_variable, self.n_batch], dtype=tf.float64))
+        self.x_tr = tf.Variable(tf.zeros([self.n_variable, self.n_batch], dtype=tf.float64))
         # post-synaptic variable
-        self.Isyn = tf.Variable(tf.zeros(self.n_variable, dtype=tf.float64))
-        self.fired = tf.Variable(tf.zeros(self.n_variable, dtype=tf.bool))
+        self.Isyn = tf.Variable(tf.zeros([self.n_variable, self.n_batch], dtype=tf.float64))
+        self.fired = tf.Variable(tf.zeros([self.n_variable, self.n_batch], dtype=tf.bool))
 
         self.conn_mat = np.zeros((self.n_variable, self.n_variable))
         self.np_weights = np.zeros(self.conn_mat.shape)
@@ -118,9 +119,9 @@ class AdEx_Layer(object):
 
     def create_Iext(self, Iext):
 
-        Iext_np = np.zeros(self.n_variable)
+        Iext_np = np.zeros((self.n_variable, self.n_batch))
         # Iext_np[:self.num_neurons[0]] = Iext
-        Iext_np[:self.neurons_per_group[0]] = Iext
+        Iext_np[:self.neurons_per_group[0], :] = Iext
 
         return tf.constant(Iext_np)
 
@@ -255,7 +256,7 @@ class AdEx_Layer(object):
 
         if self._step == int(self.T / self.dt) - int(self.l_time / self.dt):
 
-            self.xtr_record = tf.Variable(tf.zeros(self.n_variable, dtype=tf.float64))
+            self.xtr_record = tf.Variable(tf.zeros([self.n_variable, self.n_batch], dtype=tf.float64))
 
         elif self._step > int(self.T / self.dt) - int(self.l_time / self.dt):
 
@@ -274,22 +275,31 @@ class AdEx_Layer(object):
         # self.xtr_record.assign(self.xtr_record / int(self.l_time / self.dt))
 
         # synaptic current estimate from layer i to i+1
-        xtr_l = tf.reshape(tf.slice(self.xtr_record, [sum(self.neurons_per_group[:source - 1])], [pre_end - pre_begin]), (pre_end - pre_begin, 1))
+        xtr_l = tf.reshape(tf.slice(self.xtr_record,
+                                    begin=[sum(self.neurons_per_group[:source - 1]), 0],
+                                    size=[pre_end - pre_begin, self.n_batch]),
+                           (pre_end - pre_begin, self.n_batch))
         # synaptic current estimate from layer i+1 to i
-        xtr_nl = tf.reshape(tf.slice(self.xtr_record, [sum(self.neurons_per_group[:target - 1])], [post_end - post_begin]),
-                            (post_end - post_begin, 1))
+        xtr_nl = tf.reshape(tf.slice(self.xtr_record,
+                                     begin=[sum(self.neurons_per_group[:target - 1]), 0],
+                                     size=[post_end - post_begin, self.n_batch]),
+                            (post_end - post_begin, self.n_batch))
 
         # post-synaptic current from layer i to i+1
-        pre_isyn = tf.abs(w_l) * xtr_l / 10 ** -12
+        # pre_isyn = tf.abs(w_l) * xtr_l / 10 ** -12
+        pre_isyn = tf.einsum('ij,ik->kij', tf.abs(w_l), xtr_l / 1e-12)
         # post-synaptic current from layer i+1 to i
-        post_isyn = tf.transpose(tf.abs(w_l)) * xtr_nl / 10 ** -12
+        # post_isyn = tf.transpose(tf.abs(w_l)) * xtr_nl / 10 ** -12
+        post_isyn = tf.einsum('ij,ik->kji', tf.transpose(tf.abs(w_l)), xtr_nl / 1e-12)
 
         # weight changes
-        dw = lr * pre_isyn * tf.transpose(post_isyn) - 2 * reg_alpha * tf.abs(w_l)
+        # dw_all = lr * pre_isyn * tf.transpose(post_isyn) - 2 * reg_alpha * tf.abs(w_l)
+        dw_all = lr * pre_isyn * post_isyn - 2 * reg_alpha * tf.abs(w_l)
+        dw_mean = tf.reduce_mean(dw_all, axis=0)
         # update weights
         dw_sign = self.conn_mat[pre_begin, post_begin]
 
-        return dw * dw_sign
+        return dw_mean * dw_sign
         # self.w[pre_begin:pre_end, post_begin:post_end].assign(tf.add(w_l, dw * dw_sign))
 
     def weight_update(self, positive_w, negative_w, dw_tensor):
@@ -314,14 +324,17 @@ n_pred_neurons = [25]
 
 # create external input
 n_stim = 4
-ext_current = np.random.normal(2000.0, 200.0, (n_stim,)) * 10 ** -12
+n_batch = 10
+# ext_current = np.random.normal(2000.0, 600.0, (n_stim, n_batch)) * 10 ** -12
+ext_current = np.repeat(np.random.normal(2000.0, 600.0, n_stim) * 10 ** -12, n_batch).reshape(n_stim, n_batch)
 
 start_time = time.time()
 # build network
 adex_01 = AdEx_Layer(neuron_model_constants=AdEx,
                      n_pc_layers=n_pc_layers,
                      n_pred_neurons=n_pred_neurons,
-                     n_stim=n_stim)
+                     n_stim=n_stim,
+                     n_batch=n_batch)
 
 # connect layers
 # Input => E0+
@@ -347,7 +360,7 @@ sim_dur = 500 * 10 ** (-3)  # ms
 dt = 1 * 10 ** (-4)  # ms
 learning_window = 200 * 10 ** -3
 
-iter_n = 1
+iter_n = 5
 sse = []
 
 for iter_i in range(iter_n):
@@ -357,40 +370,40 @@ for iter_i in range(iter_n):
 
     # update weights
     # compute gradient
-    dw_p = adex_01.hebbian_dw(2, 4, 0.0000015, 0.00005)
-    dw_n = adex_01.hebbian_dw(3, 4, 0.0000015, 0.00005)
+    dw_p = adex_01.hebbian_dw(2, 4, 0.0000025, 0.00001)
+    dw_n = adex_01.hebbian_dw(3, 4, 0.0000025, 0.00001)
     # update weight
     adex_01.weight_update([2, 4], [3, 4], tf.add(dw_p, dw_n))
 
     end_iter_time = time.time()
     print('iter# {0} took {1:.2f} sec'.format(iter_i + 1, end_iter_time - iter_time))
 
-    sqrt_nstim = int(np.sqrt(n_stim))
-    original_image = tf.reshape(adex_01.Iext[:n_stim], (sqrt_nstim, sqrt_nstim)) / pamp
-    input_image = tf.reshape(adex_01.xtr_record[:n_stim], (sqrt_nstim, sqrt_nstim)) / pamp
-    reconstructed_image = tf.reshape(tf.tensordot(tf.transpose(adex_01.w[n_stim*3:, n_stim*2:n_stim*3]), adex_01.xtr_record[n_stim*3:], 1),
-                                     (sqrt_nstim, sqrt_nstim)) / pamp
-    sse.append(np.sum(np.abs(tf.subtract(reconstructed_image, input_image).numpy())))
-    print (reconstructed_image)
+    # sqrt_nstim = int(np.sqrt(n_stim))
+    # original_image = tf.reshape(adex_01.Iext[:n_stim], (adex_01.n_batch, sqrt_nstim, sqrt_nstim)) / pamp
+    # input_image = tf.reshape(adex_01.xtr_record[:n_stim], (adex_01.n_batch, sqrt_nstim, sqrt_nstim)) / pamp
+    # reconstructed_image = tf.reshape(tf.tensordot(tf.transpose(adex_01.w[n_stim*3:, n_stim*2:n_stim*3]), adex_01.xtr_record[n_stim*3:], 1),
+    #                                  (adex_01.n_batch, sqrt_nstim, sqrt_nstim)) / pamp
+    # sse.append(np.sum(np.abs(tf.subtract(reconstructed_image, input_image).numpy())))
+    # print (reconstructed_image)
 
-    plt.figure(figsize=(15, 5))
-    plt.subplot(141)
-    original_plot = plt.imshow(original_image, cmap='Reds', vmin=1000, vmax=4000)
-    plt.colorbar(original_plot, shrink=0.6)
-    plt.subplot(142)
-    input_plot = plt.imshow(input_image, cmap='Reds', vmin=1000, vmax=4000)
-    plt.colorbar(input_plot, shrink=0.6)
-    plt.subplot(143)
-    reconst_plot = plt.imshow(reconstructed_image, cmap='Reds', vmin=1000, vmax=4000)
-    plt.colorbar(reconst_plot, shrink=0.6)
-    plt.subplot(144)
-    diff_plot = plt.imshow(input_image - reconstructed_image, cmap='bwr', vmin=-1000, vmax=1000)
-    plt.colorbar(diff_plot, shrink=0.6)
-    plt.show()
+    # plt.figure(figsize=(15, 5))
+    # plt.subplot(141)
+    # original_plot = plt.imshow(original_image, cmap='Reds', vmin=1000, vmax=4000)
+    # plt.colorbar(original_plot, shrink=0.6)
+    # plt.subplot(142)
+    # input_plot = plt.imshow(input_image, cmap='Reds', vmin=1000, vmax=4000)
+    # plt.colorbar(input_plot, shrink=0.6)
+    # plt.subplot(143)
+    # reconst_plot = plt.imshow(reconstructed_image, cmap='Reds', vmin=1000, vmax=4000)
+    # plt.colorbar(reconst_plot, shrink=0.6)
+    # plt.subplot(144)
+    # diff_plot = plt.imshow(input_image - reconstructed_image, cmap='bwr', vmin=-1000, vmax=1000)
+    # plt.colorbar(diff_plot, shrink=0.6)
+    # plt.show()
 
-plt.figure(figsize=(5,5))
-plt.plot(sse)
-plt.show()
+# plt.figure(figsize=(5,5))
+# plt.plot(sse)
+# plt.show()
 
 # input to output plot (given Iext, what is EPSC?)
 # plt.scatter(adex_01.Isyn[:n_stim]/pamp, adex_01.xtr_record[:n_stim]/pamp)
@@ -403,4 +416,32 @@ print('building : {0:.2f} sec\nsimulation : {1:.2f} sec\ntotal : {2:.2f} sec'.fo
                                                                                      end_time - start_time))
 
 
-# plt.show()
+# test learned weights
+# n_stim = 9
+# test_current = np.random.normal(2000.0, 600.0, (n_stim, 1)) * 10 ** -12
+test_current = ext_current[:, 0].reshape(n_stim,1)
+# load the model
+adex_01(sim_dur, dt, learning_window, test_current)
+
+sqrt_nstim = int(np.sqrt(n_stim))
+original_image = tf.reshape(adex_01.Iext[:n_stim, 0], (sqrt_nstim, sqrt_nstim)) / pamp
+input_image = tf.reshape(adex_01.xtr_record[:n_stim, 0], (sqrt_nstim, sqrt_nstim)) / pamp
+reconstructed_image = tf.reshape(tf.tensordot(tf.transpose(adex_01.w[n_stim*3:, n_stim*2:n_stim*3]), adex_01.xtr_record[n_stim*3:, 0], 1),
+                                 (sqrt_nstim, sqrt_nstim)) / pamp
+sse.append(np.sum(np.abs(tf.subtract(reconstructed_image, input_image).numpy())))
+print (reconstructed_image)
+
+plt.figure(figsize=(15, 5))
+plt.subplot(141)
+original_plot = plt.imshow(original_image, cmap='Reds', vmin=1000, vmax=4000)
+plt.colorbar(original_plot, shrink=0.6)
+plt.subplot(142)
+input_plot = plt.imshow(input_image, cmap='Reds', vmin=1000, vmax=4000)
+plt.colorbar(input_plot, shrink=0.6)
+plt.subplot(143)
+reconst_plot = plt.imshow(reconstructed_image, cmap='Reds', vmin=1000, vmax=4000)
+plt.colorbar(reconst_plot, shrink=0.6)
+plt.subplot(144)
+diff_plot = plt.imshow(input_image - reconstructed_image, cmap='bwr', vmin=-1000, vmax=1000)
+plt.colorbar(diff_plot, shrink=0.6)
+plt.show()
