@@ -13,20 +13,16 @@ def create_shapes(base_mean, noise_var, n_imgs_per_shape):
                 [(0, 0), (0, 2), (1, 1), (2, 0), (2, 2)] # diamond
                 ]
 
-    n_imgs = sum(n_imgs_per_shape)
-    imgs = np.ones((n_imgs, 3, 3)) * base_mean + np.random.normal(0, 1, (n_imgs, 3, 3)) * noise_var
+    n_shapes = len(loc_list)
+    n_imgs_total = n_shapes * n_imgs_per_shape
 
-    for i, n_shape in enumerate(n_imgs_per_shape):
-        for loc in loc_list[i]:
-            imgs[(slice(i * n_shape, (i+1) * n_shape),) + loc] = 0
+    imgs = np.ones((n_imgs_total, 3, 3)) * base_mean + np.random.normal(0, 1, (n_imgs_total, 3, 3)) * noise_var
+
+    for i, loc in enumerate(loc_list):
+        for loc_i in loc:
+            imgs[(slice(i * n_imgs_per_shape, (i+1) * n_imgs_per_shape),) + loc_i] = 0
 
     return imgs
-
-# img_set = create_shapes(base_mean=base_mean,
-    #                         noise_var=noise_var,
-    #                         n_imgs_per_shape=[10, 10, 10, 10]
-    #                         )
-    #
 
 def plot_imgset(img_set, nsample, nshape, batch_size):
 
