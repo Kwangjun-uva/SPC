@@ -65,6 +65,8 @@ class AdEx_Layer(object):
         # weight update time interval
         self.l_time = None
 
+        self.xtr_record = None
+
         self.initialize_var()
 
     def initialize_var(self):
@@ -79,8 +81,6 @@ class AdEx_Layer(object):
         self.Isyn = tf.Variable(tf.zeros([self.n_variable, self.n_batch], dtype=tf.float64))
         self.fired = tf.Variable(tf.zeros([self.n_variable, self.n_batch], dtype=tf.bool))
 
-        self.xtr_record = None
-
     def __call__(self, sim_duration, time_step, lt, I_ext, num_batch):
 
         # simulation parameters
@@ -90,16 +90,14 @@ class AdEx_Layer(object):
         self._step = 0
         self.l_time = lt
 
-        # initialize internal variables
         self.n_batch = num_batch
+
+        # initialize internal variables
         self.initialize_var()
 
         # feed external corrent to the first layer
         self.Iext = self.create_Iext(I_ext)
 
-        # self.fs = tf.Variable(tf.zeros(sum(self.num_neurons), dtype=tf.int64))
-        # self.fr = tf.Variable(tf.zeros([self.n_variable, ], dtype=tf.float64))
-        # self.x_trace = []
         # self.fr = []
 
         for t in range(int(self.T / self.dt)):
@@ -114,14 +112,11 @@ class AdEx_Layer(object):
             # self.fr.append(fired_float)
             # self.fr.assign_add(fired_float)
 
-            # self.x_trace.append(self.x_tr[9:27].numpy())
-
             self._step += 1
 
         # self.fr.assign(self.fr / self._step)
         # take the mean of synaptic output
         self.xtr_record.assign(self.xtr_record / int(self.l_time / self.dt))
-        # self.x_trace.assign(self.xtr_record)
         # self.fr = np.asarray(self.fr)
 
     def create_Iext(self, Iext):
@@ -323,19 +318,23 @@ class AdEx_Layer(object):
         self.w[pre_begin:pre_end, post_begin:post_end].assign(new_weights * -1)
         self.w[post_begin:post_end, pre_begin:pre_end].assign(tf.transpose(new_weights))
 
-def test_inference(n_stim, imgs, nn_model, stim_shape, stim_type):
+def test_inference(n_stim, imgs, nn_model, stim_shape, stim_type, digit_list=None):
 
     if stim_type=='novel':
         # test learned weights with a novel stimulus (however, it belongs to one of the four categories the model has learned)
         # test_current = create_shapes(2000e-12, 300e-12, 1).reshape(n_stim, n_shape)
-        test_current, digits, test_set_idx, label_set_shuffled = create_mnist_set(nDigit=10, nSample=1)
+        # shape = (n_batch, n_stim)
+        test_current, digits, test_set_idx, label_set_shuffled = create_mnist_set(nDigit=stim_shape, nSample=1,
+                                                                                  test_digits=digit_list)
 
     elif stim_type=='trained':
         # test with a stimulus from the training set
-        test_current = np.copy(imgs[np.random.choice(stim_shape * imgs.shape[0]/4)]).reshape(n_stim, 1)
+        # test_current = np.copy(imgs[np.random.choice(stim_shape * imgs.shape[0]/4)]).reshape(n_stim, 1)
+        test_current = imgs[::int(imgs.shape[0]/stim_shape)]
 
     # load the model
-    nn_model(sim_dur, dt, learning_window, test_current.T * 10 ** -12, test_current.shape[0])
+    nn_model(sim_duration=sim_dur, time_step=dt, lt=learning_window,
+             I_ext=test_current.T * 10 ** -12, num_batch=test_current.shape[0])
 
     sqrt_nstim = int(np.sqrt(n_stim))
     original_image = tf.reshape(nn_model.Iext[:n_stim, :], (sqrt_nstim, sqrt_nstim, test_current.shape[0])) / pamp
@@ -390,12 +389,12 @@ def train_network(model, num_epoch, lr, reg_a, input_current):
         epoch_time_avg += time.time() - epoch_time
         print('***** time remaining = {0:.2f} sec'.format(epoch_time_avg / (epoch_i + 1) * (num_epoch - epoch_i - 1)))
 
-        input_image = tf.reshape(model.xtr_record[:n_stim, 0], (sqrt_nstim, sqrt_nstim)) / pamp
+        input_image = tf.reshape(model.xtr_record[:n_stim, :], (sqrt_nstim, sqrt_nstim, model.n_batch)) / pamp
         reconstructed_image = tf.reshape(
-            tf.tensordot(tf.transpose(model.w[n_stim * 3:, n_stim * 2:n_stim * 3]), model.xtr_record[n_stim * 3:, 0],
+            tf.tensordot(tf.transpose(model.w[n_stim * 3:, n_stim * 2:n_stim * 3]), model.xtr_record[n_stim * 3:, :],
                          1),
-            (sqrt_nstim, sqrt_nstim)) / pamp
-        sse.append(np.sum(tf.subtract(reconstructed_image, input_image).numpy() ** 2))
+            (sqrt_nstim, sqrt_nstim, model.n_batch)) / pamp
+        sse.append(tf.reduce_sum(tf.reduce_mean(reconstructed_image - input_image, axis=2) ** 2).numpy())
 
     end_time = time.time()
     print('building : {0:.2f} sec\nsimulation : {1:.2f} sec\ntotal : {2:.2f} sec'.format(build_end_time - start_time,
@@ -407,7 +406,7 @@ def train_network(model, num_epoch, lr, reg_a, input_current):
     plt.xlabel('epoch #')
     plt.ylabel('SSE')
 
-    return sse, sse_fig
+    return sse, sse_fig, dw_p, dw_n
 
 pamp = 10 ** -12
 
@@ -418,8 +417,8 @@ n_pred_neurons = [100]
 # create external input
 # n_stim = 9
 # sqrt_nstim = int(np.sqrt(n_stim))
-n_batch = 100
-n_shape = 10
+n_batch = 500
+n_shape = 5
 
 # ext_current = np.random.normal(2000.0, 600.0, (n_stim, n_batch)) * 10 ** -12
 # ext_current = np.repeat(np.random.normal(2000.0, 600.0, n_stim) * 10 ** -12, n_batch).reshape(n_stim, n_batch)
@@ -468,18 +467,20 @@ adex_01.initialize_weight()
 build_end_time = time.time()
 
 # simulate
-sim_dur = 1000 * 10 ** (-3)  # ms
+sim_dur = 500 * 10 ** (-3)  # ms
 dt = 1 * 10 ** (-3)  # ms
 learning_window = 200 * 10 ** -3
 
-n_epoch = 2
-lrate = 0.00000075
-reg_alpha = 0.00001
+n_epoch = 30
+lrate = 0.8e-8
+reg_alpha = 1e-10
 
-sse, sse_fig = train_network(model=adex_01, num_epoch=n_epoch, lr=lrate, reg_a=reg_alpha, input_current=ext_current.T)
+sse, sse_fig, dwp, dwn = train_network(model=adex_01, num_epoch=n_epoch, lr=lrate, reg_a=reg_alpha, input_current=ext_current.T)
 plt.show()
 w_fig = weight_dist(weights=adex_01.w, weights_init=adex_01.w_init, n_stim=n_stim)
 plt.show()
-# test_fig = test_inference(n_stim=n_stim, imgs=img_set, nn_model=adex_01, stim_shape=2, stim_type='novel')
-test_fig = test_inference(n_stim=n_stim, imgs=ext_current.T, nn_model=adex_01, stim_shape=2, stim_type='novel')
+test_fig = test_inference(n_stim=n_stim, imgs=ext_current.T, nn_model=adex_01, stim_shape=n_shape, stim_type='novel',
+                          digit_list=digits)
+# test_fig = test_inference(n_stim=n_stim, imgs=ext_current.T, nn_model=adex_01, stim_shape=n_shape, stim_type='trained',
+#                           digit_list=digits)
 plt.show()

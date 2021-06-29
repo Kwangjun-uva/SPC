@@ -6,7 +6,7 @@ import numpy as np
 
 def create_mnist_set(nSample, nDigit, test_digits=None):
 
-    if test_digits:
+    if test_digits is not None:
         digits = test_digits
     else:
         # test_set contains n randomly selected examples for each of the n digits (0-9)
@@ -61,10 +61,15 @@ def plot_mnist_set(testset, testset_idx, nDigit, nSample):
     # Plot images of the digits
     fig = plt.figure()
 
-    img = np.zeros((30 * nDigit, 30 * nSample))
+    if nSample > 10:
+        width = 10
+    else:
+        width = nSample
+
+    img = np.zeros((30 * nDigit, 30 * width))
     for i in range(nDigit):
         ix = 30 * i + 1
-        for j in range(nSample):#n_img_per_row):
+        for j in range(width):#n_img_per_row):
             iy = 30 * j + 1
             img[ix:ix + 28, iy:iy + 28] = X[i * nSample + j].reshape((28, 28))
 

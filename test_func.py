@@ -33,14 +33,18 @@ def error_raster(fr_array, n_stim, sample_neuron_idx):
 
 def weight_dist(weights, weights_init, n_stim):
 
-    init_w = weights_init[n_stim:2*n_stim, 3*n_stim:].numpy()
-    updated_w = weights[n_stim:2*n_stim, 3*n_stim:].numpy()
+    init_w = weights_init[n_stim:2*n_stim, 3*n_stim:].numpy().flatten()
+    updated_w = weights[n_stim:2*n_stim, 3*n_stim:].numpy().flatten()
+    nonzero_w = updated_w[updated_w>0]
+
     fig = plt.figure()
     plt.subplot(211)
-    plt.hist(init_w.flatten(), bins=100)
+    plt.hist(init_w, bins=100)
     plt.title('initial weight distribution')
     plt.subplot(212)
-    plt.hist(updated_w.flatten(), bins=100)
+    plt.hist(nonzero_w, bins=100,
+             label='nonzero W = {0:.2f}%'.format(len(nonzero_w) / len(updated_w) * 100))
     plt.title('weight distribution')
+    plt.legend()
 
     return fig
