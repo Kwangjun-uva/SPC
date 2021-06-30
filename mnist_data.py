@@ -4,7 +4,7 @@ import matplotlib.pyplot as plt
 import tensorflow as tf
 import numpy as np
 
-def create_mnist_set(nSample, nDigit, test_digits=None):
+def create_mnist_set(nSample, nDigit, test_digits=None, shuffle=False):
 
     if test_digits is not None:
         digits = test_digits
@@ -31,21 +31,18 @@ def create_mnist_set(nSample, nDigit, test_digits=None):
 
     label_set = np.ravel(label_set)
 
-    # shuffle the order
     test_set_idx = np.arange(nDigit * nSample)
-    np.random.shuffle(test_set_idx)
-    test_set_shuffled = test_set[test_set_idx, :]
-    label_set_shuffled = [label_set[i] for i in test_set_idx]
 
-    # # plot row = digit, col = sample
-    # test_set_reordered = np.zeros(np.shape(test_set_shuffled))
-    # for i in range(nDigit * nSample):
-    #     test_set_reordered[test_set_idx[i], :] = test_set_shuffled[i, :]
-    #
-    # # sample set index
-    # sample_set_idx = [label_set_shuffled.index(x) for x in set(label_set_shuffled)]
+    if shuffle:
+        # shuffle the order
+        np.random.shuffle(test_set_idx)
+        test_set_shuffled = test_set[test_set_idx, :]
+        label_set_shuffled = [label_set[i] for i in test_set_idx]
 
-    return test_set_shuffled, digits, test_set_idx, label_set_shuffled
+        return test_set_shuffled, digits, test_set_idx, label_set_shuffled
+
+    else:
+        return test_set, digits, test_set_idx, label_set
 
 def reordering(mat, idx):
     len_mat = np.arange(len(idx))
@@ -76,7 +73,7 @@ def plot_mnist_set(testset, testset_idx, nDigit, nSample):
     plt.imshow(img, cmap=plt.cm.Reds, vmin=1000e-12, vmax=4000e-12)
     plt.xticks([])
     plt.yticks([])
-    plt.title('MNIST images')
+    plt.title('MNIST images: nDigits={0}, nSample={1}'.format(nDigit, nSample))
     # plt.savefig('figures/normalized_digits')
 
     return fig

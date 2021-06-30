@@ -2,9 +2,10 @@ import numpy as np
 import tensorflow as tf
 import matplotlib.pyplot as plt
 import time
-from create_33images import create_shapes, plot_imgset
+# from create_33images import create_shapes, plot_imgset
 from test_func import weight_dist
 from mnist_data import create_mnist_set, plot_mnist_set
+from datetime import timedelta
 
 # # List all your physical GPUs
 # gpus = tf.config.experimental.list_physical_devices('GPU')
@@ -182,8 +183,8 @@ class AdEx_Layer(object):
         self.x_tr = tf.add(self.x_tr, dxtr)
 
     def update_Isyn(self):
-        # return tf.tensordot(tf.transpose(self.w * self.conn_mat), self.x_tr, 1) + self.Iext
-        return tf.tensordot(tf.transpose(self.w), self.x_tr * self.w_const, 1) + self.Iext
+        return tf.transpose(self.w) @ (self.x_tr * self.w_const) + self.Iext
+        # return tf.tensordot(tf.transpose(self.w), self.x_tr * self.w_const, 1) + self.Iext
 
     def get_current_timestep(self):
         return self._step * self.dt
@@ -216,9 +217,9 @@ class AdEx_Layer(object):
                           target_sym_syn_type='inh'):
 
         source_begin, source_end, target_begin, target_end = self.pre_post_idx(source, target)
-        n_target = (target_end - target_begin)
+        n_target = (target_end - target_begin) * 0.1
         # n_target = 5
-        rand_weights = np.random.normal(5.0, 1.0, (self.neurons_per_group[source - 1],
+        rand_weights = np.random.normal(1.0, 0.3, (self.neurons_per_group[source - 1],
                                                    self.neurons_per_group[target - 1])) / \
                        n_target * self.conn_mat[source_begin:source_end, target_begin:target_end]
         self.np_weights[source_begin:source_end, target_begin:target_end] = rand_weights
@@ -340,12 +341,10 @@ def test_inference(n_stim, imgs, nn_model, stim_shape, stim_type, digit_list=Non
     original_image = tf.reshape(nn_model.Iext[:n_stim, :], (sqrt_nstim, sqrt_nstim, test_current.shape[0])) / pamp
     input_image = tf.reshape(nn_model.xtr_record[:n_stim, :], (sqrt_nstim, sqrt_nstim, test_current.shape[0])) / pamp
     reconstructed_image = tf.reshape(
-        tf.tensordot(tf.transpose(nn_model.w[n_stim * 3:, n_stim * 2:n_stim * 3]),
-                     nn_model.xtr_record[n_stim * 3:, :],
-                     1),
+        tf.transpose(nn_model.w[n_stim * 3:, n_stim * 2:n_stim * 3]) @ nn_model.xtr_record[n_stim * 3:, :],
         (sqrt_nstim, sqrt_nstim, test_current.shape[0])) / pamp
 
-    fig, axs = plt.subplots(ncols=4, nrows=test_current.shape[0], figsize=(4*5, 10*4))
+    fig, axs = plt.subplots(ncols=4, nrows=test_current.shape[0], figsize=(4*5, 4*test_current.shape[0]))
     for shape_i in range(test_current.shape[0]):
 
         original_plot = axs[shape_i, 0].imshow(original_image[:, :, shape_i], cmap='Reds', vmin=1000, vmax=4000)
@@ -360,7 +359,6 @@ def test_inference(n_stim, imgs, nn_model, stim_shape, stim_type, digit_list=Non
 
     return fig
 
-
 def train_network(model, num_epoch, lr, reg_a, input_current):
 
     sse = []
@@ -369,6 +367,8 @@ def train_network(model, num_epoch, lr, reg_a, input_current):
     for epoch_i in range(num_epoch):
 
         epoch_time = time.time()
+
+        fig, axs = plt.subplots(ncols=3, nrows=n_shape, figsize=(4 * 5, 4 * n_shape))
 
         for iter_i in range(n_shape):
             iter_time = time.time()
@@ -382,18 +382,38 @@ def train_network(model, num_epoch, lr, reg_a, input_current):
             model.weight_update([2, 4], [3, 4], tf.add(dw_p, dw_n))
 
             end_iter_time = time.time()
-            print('epoch # {0} = {1:.2f}, iter# {2} = {3:.2f} sec'.format(epoch_i + 1, end_iter_time - epoch_time,
-                                                                          iter_i + 1, end_iter_time - iter_time))
+            print('epoch #{0}/{1} = {2:.2f}, iter #{3}/{4} = {5:.2f} sec'.format(epoch_i + 1, num_epoch,
+                                                                                 end_iter_time - epoch_time,
+                                                                                 iter_i + 1, n_shape,
+                                                                                 end_iter_time - iter_time))
+            # plot progres
+            input_img = tf.reshape(model.xtr_record[:n_stim, -1], (sqrt_nstim, sqrt_nstim)) / pamp
+            reconst_img = tf.reshape(
+                tf.transpose(model.w[n_stim * 3:, n_stim * 2:n_stim * 3]) @
+                tf.reshape(model.xtr_record[n_stim * 3:, -1], (model.xtr_record[n_stim * 3:, -1].shape[0], 1)),
+                (sqrt_nstim, sqrt_nstim)) / pamp
 
-        # add time remaining?
+            input_plot = axs[iter_i, 0].imshow(input_img, cmap='Reds', vmin=1000, vmax=4000)
+            fig.colorbar(input_plot, ax=axs[iter_i, 0], shrink=0.6)
+            reconst_plot = axs[iter_i, 1].imshow(reconst_img, cmap='Reds', vmin=1000, vmax=4000)
+            fig.colorbar(reconst_plot, ax=axs[iter_i, 1], shrink=0.6)
+            diff_plot = axs[iter_i, 2].imshow(input_img - reconst_img, cmap='bwr',
+                                               vmin=-1000, vmax=1000)
+            fig.colorbar(diff_plot, ax=axs[iter_i, 2], shrink=0.6)
+            fig.suptitle('progress update: epoch #{0}/{1}'.format(epoch_i+1, num_epoch))
+
+        plt.show()
+
+        # time remaining
         epoch_time_avg += time.time() - epoch_time
-        print('***** time remaining = {0:.2f} sec'.format(epoch_time_avg / (epoch_i + 1) * (num_epoch - epoch_i - 1)))
+        print('***** time remaining = {0}'.format(
+            str(timedelta(seconds=epoch_time_avg / (epoch_i + 1) * (num_epoch - epoch_i - 1)))))
 
         input_image = tf.reshape(model.xtr_record[:n_stim, :], (sqrt_nstim, sqrt_nstim, model.n_batch)) / pamp
         reconstructed_image = tf.reshape(
-            tf.tensordot(tf.transpose(model.w[n_stim * 3:, n_stim * 2:n_stim * 3]), model.xtr_record[n_stim * 3:, :],
-                         1),
+            tf.transpose(model.w[n_stim * 3:, n_stim * 2:n_stim * 3]) @ model.xtr_record[n_stim * 3:, :],
             (sqrt_nstim, sqrt_nstim, model.n_batch)) / pamp
+
         sse.append(tf.reduce_sum(tf.reduce_mean(reconstructed_image - input_image, axis=2) ** 2).numpy())
 
     end_time = time.time()
@@ -402,23 +422,23 @@ def train_network(model, num_epoch, lr, reg_a, input_current):
                                                                                          end_time - start_time))
 
     sse_fig = plt.figure()
-    plt.plot(sse)
+    plt.plot(np.log(sse))
     plt.xlabel('epoch #')
-    plt.ylabel('SSE')
+    plt.ylabel('log (SSE)')
 
-    return sse, sse_fig, dw_p, dw_n
+    return sse, sse_fig
 
 pamp = 10 ** -12
 
 # network parameters
 n_pc_layers = 1
-n_pred_neurons = [100]
+n_pred_neurons = [500]
 
 # create external input
 # n_stim = 9
 # sqrt_nstim = int(np.sqrt(n_stim))
-n_batch = 500
-n_shape = 5
+n_batch = 100
+n_shape = 3
 
 # ext_current = np.random.normal(2000.0, 600.0, (n_stim, n_batch)) * 10 ** -12
 # ext_current = np.repeat(np.random.normal(2000.0, 600.0, n_stim) * 10 ** -12, n_batch).reshape(n_stim, n_batch)
@@ -472,15 +492,14 @@ dt = 1 * 10 ** (-3)  # ms
 learning_window = 200 * 10 ** -3
 
 n_epoch = 30
-lrate = 0.8e-8
-reg_alpha = 1e-10
+lrate = 5.0e-8
+reg_alpha = 1e-1
 
-sse, sse_fig, dwp, dwn = train_network(model=adex_01, num_epoch=n_epoch, lr=lrate, reg_a=reg_alpha, input_current=ext_current.T)
+sse, sse_fig = train_network(model=adex_01, num_epoch=n_epoch, lr=lrate, reg_a=reg_alpha, input_current=ext_current.T)
 plt.show()
 w_fig = weight_dist(weights=adex_01.w, weights_init=adex_01.w_init, n_stim=n_stim)
 plt.show()
 test_fig = test_inference(n_stim=n_stim, imgs=ext_current.T, nn_model=adex_01, stim_shape=n_shape, stim_type='novel',
                           digit_list=digits)
-# test_fig = test_inference(n_stim=n_stim, imgs=ext_current.T, nn_model=adex_01, stim_shape=n_shape, stim_type='trained',
-#                           digit_list=digits)
+
 plt.show()
