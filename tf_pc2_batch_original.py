@@ -435,8 +435,8 @@ n_pred_neurons = [500]
 # create external input
 # n_stim = 9
 # sqrt_nstim = int(np.sqrt(n_stim))
-n_batch = 100
-n_shape = 10
+n_batch = 10
+n_shape = 3
 
 # ext_current = np.random.normal(2000.0, 600.0, (n_stim, n_batch)) * 10 ** -12
 # ext_current = np.repeat(np.random.normal(2000.0, 600.0, n_stim) * 10 ** -12, n_batch).reshape(n_stim, n_batch)
@@ -489,7 +489,7 @@ sim_dur = 500 * 10 ** (-3)  # ms
 dt = 1 * 10 ** (-4)  # ms
 learning_window = 100 * 10 ** -3
 
-n_epoch = 10
+n_epoch = 1
 lrate = 0.25e-8
 reg_alpha = 1e-4
 
