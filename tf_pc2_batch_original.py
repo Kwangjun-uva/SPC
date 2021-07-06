@@ -407,10 +407,10 @@ def train_network(model, num_epoch, lr, reg_a, input_current):
         print('***** time remaining = {0}'.format(
             str(timedelta(seconds=epoch_time_avg / (epoch_i + 1) * (num_epoch - epoch_i - 1)))))
 
-        input_image = tf.reshape(model.xtr_record[:n_stim, :], (sqrt_nstim, sqrt_nstim, model.n_batch)) / pamp
+        input_image = tf.reshape(model.xtr_record[:n_stim, :], (sqrt_nstim, sqrt_nstim, model.batch_size)) / pamp
         reconstructed_image = tf.reshape(
             tf.transpose(model.w[n_stim * 3:, n_stim * 2:n_stim * 3]) @ model.xtr_record[n_stim * 3:, :],
-            (sqrt_nstim, sqrt_nstim, model.n_batch)) / pamp
+            (sqrt_nstim, sqrt_nstim, model.batch_size)) / pamp
 
         sse.append(tf.reduce_sum(tf.reduce_mean(reconstructed_image - input_image, axis=2) ** 2).numpy())
 
@@ -435,7 +435,7 @@ n_pred_neurons = [500]
 # create external input
 # n_stim = 9
 # sqrt_nstim = int(np.sqrt(n_stim))
-n_batch = 10
+n_batch = 500
 n_shape = 3
 
 # ext_current = np.random.normal(2000.0, 600.0, (n_stim, n_batch)) * 10 ** -12
@@ -487,7 +487,7 @@ build_end_time = time.time()
 # simulate
 sim_dur = 500 * 10 ** (-3)  # ms
 dt = 1 * 10 ** (-4)  # ms
-learning_window = 100 * 10 ** -3
+learning_window = 200 * 10 ** -3
 
 n_epoch = 1
 lrate = 0.25e-8

@@ -31,10 +31,10 @@ def error_raster(fr_array, n_stim, sample_neuron_idx):
 
     return (ep_fr + en_fr > 1).any(), fig
 
-def weight_dist(weights, weights_init, n_stim):
+def weight_dist(weights, weights_init):
 
-    init_w = weights_init[n_stim:2*n_stim, 3*n_stim:].numpy().flatten()
-    updated_w = weights[n_stim:2*n_stim, 3*n_stim:].numpy().flatten()
+    init_w = weights_init.numpy().flatten()
+    updated_w = weights.numpy().flatten()
     nonzero_w = updated_w[updated_w>0]
 
     fig = plt.figure()
