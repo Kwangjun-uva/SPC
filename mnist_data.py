@@ -25,7 +25,7 @@ def create_mnist_set(nSample, nDigit, test_digits=None, shuffle=False):
         rand_ids = np.random.choice(5000, nSample)
         curr_digit = x_train[np.where(y_train == digits[i])][rand_ids].reshape(nSample, np.multiply(*x_train[0].shape))
         norm_digits = curr_digit / np.linalg.norm(curr_digit, axis=1).reshape(nSample, 1)
-        test_set[i*nSample:(i+1)*nSample] = 12000 * norm_digits + 1000
+        test_set[i*nSample:(i+1)*nSample] = 12000 * norm_digits + 600
 
         label_set.append(y_train[np.where(y_train == digits[i])][rand_ids])
 
