@@ -83,17 +83,17 @@ class AdEx_Layer(object):
         # weight update time interval
         self.l_time = None
 
-        # internal variables
-        self.v = None
-        self.c = None
-        self.ref = None
-        # pre-synaptic variables
-        self.x = None
-        self.x_tr = None
-        # post-synaptic variable
-        self.Isyn = None
-        self.fired = None
-        self.xtr_record = None
+        # # internal variables
+        # self.v = None
+        # self.c = None
+        # self.ref = None
+        # # pre-synaptic variables
+        # self.x = None
+        # self.x_tr = None
+        # # post-synaptic variable
+        # self.Isyn = None
+        # self.fired = None
+        # self.xtr_record = None
 
     def initialize_var(self):
 
@@ -107,6 +107,8 @@ class AdEx_Layer(object):
         # post-synaptic variable
         self.Isyn = tf.Variable(tf.zeros([self.n_variable, self.batch_size], dtype=tf.float32))
         self.fired = tf.Variable(tf.zeros([self.n_variable, self.batch_size], dtype=tf.bool))
+
+        # self.xtr_record = None
 
     def __call__(self, sim_duration, time_step, lt, I_ext, bat_size):
 
@@ -134,7 +136,7 @@ class AdEx_Layer(object):
             self._step += 1
 
         # take the mean of synaptic output
-        self.xtr_record.assign(self.xtr_record / self.l_time / self.dt)
+        self.xtr_record.assign(self.xtr_record / (self.l_time / self.dt))
 
     def update_var(self):
 
@@ -148,7 +150,7 @@ class AdEx_Layer(object):
         self.update_c(ref_constraint)
 
         # subtract one time step (1) from refractory vector
-        self.ref = tf.maximum(tf.subtract(self.ref, self.dt), 0)
+        self.ref = tf.cast(tf.maximum(tf.subtract(self.ref, 1), 0), tf.float32)
 
         # update synaptic current
         self.update_x()
@@ -188,7 +190,7 @@ class AdEx_Layer(object):
     def update_Isyn(self):
 
         # I = ext
-        self.Isyn[:self.neurons_per_group[0]].assign(self.Iext)
+        self.Isyn[:self.n_stim].assign(self.Iext)
         # gist = W[ig]@ Isyn[I]
         input_gist = tf.transpose(self.w['ig']) @ (self.x_tr[:self.neurons_per_group[0]] * self.w_const)
         self.Isyn[-self.n_gist:, :].assign(input_gist)
@@ -356,7 +358,7 @@ class AdEx_Layer(object):
                 fig, axs = plt.subplots(ncols=self.n_pc_layer + 1, nrows=n_class, figsize=(4 * 5, 4 * n_class))
                 plt_idx = 0
             else:
-                plt_idx = 3
+                plt_idx = n_class
                 fig, axs = [None, None]
 
             for iter_i in range(n_batch):
@@ -406,6 +408,7 @@ class AdEx_Layer(object):
             if ((epoch_i + 1) % report_idx == 0) and (plt_idx == n_class):
                 fig.suptitle('progress update: epoch #{0}/{1}'.format(epoch_i + 1, num_epoch))
                 fig.savefig(self.model_dir + '/progress_update_{0:0=2d}.png'.format(epoch_i + 1))
+                plt.close(fig)
                 # plt.show()
 
             # time remaining
@@ -422,18 +425,20 @@ class AdEx_Layer(object):
                 (sqrt_nstim, sqrt_nstim, self.batch_size)) / pamp
             sse.append(tf.reduce_sum(tf.reduce_mean((l1_image - input_image) ** 2, axis=2)).numpy())
 
-            sse_plot = plt.figure()
+
+            plt.figure()
             plt.plot(np.arange(epoch_i+1), np.log(sse))
             plt.xlabel('epoch #')
             plt.ylabel('log (SSE)')
             plt.savefig(self.model_dir + '/log_sse.png'.format(epoch_i + 1))
+            plt.close()
             # plt.show()
 
         end_time = time.time()
         update_sim_time(self.model_dir, '\nsimulation : {0:.2f} sec'.format(end_time - start_time))
         # print('simulation : {0:.2f} sec'.format(end_time - start_time))
 
-        return sse, sse_plot
+        return sse
 
 def pick_idx(idx_set, n_class, size_batch):
     return_list = []
@@ -579,7 +584,7 @@ n_pc_layers = len(n_pred_neurons)
 n_gist = 128
 
 # create external input
-batch_size = 32
+batch_size = 8
 n_shape = 4
 n_samples = 8
 
@@ -612,7 +617,6 @@ rep_set_idx = pick_idx(test_set_idx, n_shape, batch_size)
 
 # plot the same test set
 plot_mnist_set(testset=ext_current, testset_idx=test_set_idx, nDigit=n_shape, nSample=n_samples, savefolder=save_folder)
-# plt.show()
 
 conn_vals = np.array([conn_probs(a_i, b_i)
                       for a_i, b_i in zip([n_stim] + [n_gist] * n_pc_layers, [n_gist] + n_pred_neurons)])
@@ -628,12 +632,12 @@ adex_01 = AdEx_Layer(save_folder=save_folder,
                      gist_num=n_gist, gist_connp=conn_vals, gist_maxw=max_vals)
 
 # train_network(self, num_epoch, sim_dur, sim_dt, sim_lt, lr, reg_a, input_current, n_shape, n_batch, set_idx):
-sse, sse_plot = adex_01.train_network(num_epoch=n_epoch, sim_dur=sim_dur, sim_dt=dt, sim_lt=learning_window,
-                                     lr=lrate, reg_a=reg_alpha,
-                                     input_current=ext_current.T,
-                                     n_class=n_shape, batch_size=batch_size,
-                                     set_idx=rep_set_idx,
-                                     report_idx=report_index)
+sse = adex_01.train_network(num_epoch=n_epoch,
+                            sim_dur=sim_dur, sim_dt=dt, sim_lt=learning_window,
+                            lr=lrate, reg_a=reg_alpha,
+                            input_current=ext_current.T,
+                            n_class=n_shape, batch_size=batch_size,
+                            set_idx=rep_set_idx, report_idx=report_index)
 
 # # save simulation data
 # save_data(save_folder)

@@ -84,7 +84,7 @@ class AdEx_Layer(object):
         # internal variables
         self.v = tf.Variable(tf.ones([self.n_variable, self.batch_size], dtype=tf.float32) * self.EL)
         self.c = tf.Variable(tf.zeros([self.n_variable, self.batch_size], dtype=tf.float32))
-        self.ref = tf.Variable(tf.zeros([self.n_variable, self.batch_size], dtype=tf.int32))
+        self.ref = tf.Variable(tf.zeros([self.n_variable, self.batch_size], dtype=tf.float32))
         # pre-synaptic variables
         self.x = tf.Variable(tf.zeros([self.n_variable, self.batch_size], dtype=tf.float32))
         self.x_tr = tf.Variable(tf.zeros([self.n_variable, self.batch_size], dtype=tf.float32))
@@ -147,7 +147,8 @@ class AdEx_Layer(object):
 
         # subtract one time step (1) from refractory vector
         # self.ref = tf.maximum(tf.subtract(self.ref, int((1 * 10 ** -1) / self.dt)), 0)
-        self.ref = tf.cast(tf.maximum(tf.subtract(self.ref, int((1 * 10 ** -1) / self.dt)), 0), tf.float32)
+        # self.ref = tf.cast(tf.maximum(tf.subtract(self.ref, int((1 * 10 ** -1) / self.dt)), 0), tf.float32)
+        self.ref = tf.cast(tf.maximum(tf.subtract(self.ref, 1), 0), tf.float32)
 
         # update synaptic current
         self.update_x()
@@ -417,8 +418,10 @@ ext_current *= pamp
 n_stim = ext_current.shape[1]
 sqrt_nstim = int(np.sqrt(n_stim))
 
+
+
 # plot the same test set
-plot_mnist_set(testset=ext_current, testset_idx=test_set_idx, nDigit=n_shape, nSample=n_samples)
+plot_mnist_set(savefolder='test_figures', testset=ext_current, testset_idx=test_set_idx, nDigit=n_shape, nSample=n_samples)
 plt.show()
 
 # def conn_probs(n_a, n_b):
@@ -429,10 +432,11 @@ def conn_probs(n_a, n_b):
 conn_vals = np.array([conn_probs(a_i, b_i)
                       for a_i, b_i in zip([n_stim, n_gist, n_gist], [n_gist, n_pred_neurons[0], n_pred_neurons[1]])])
 
+# max_vals = np.array([250, 300, 300]) / 550
 max_vals = np.array([1, 1, 1]) * 0.25
 
 # conn_vals = np.array([0.02, 0.05, 0.05])
-# max_vals = 0.25 * np.array([np.sqrt(b/a) for a,b in zip([n_stim, n_gist, n_gist], [n_gist, n_pred_neurons[0], n_pred_neurons[1]])])
+max_vals = 0.25 * np.array([np.sqrt(b/a) for a,b in zip([n_stim, n_gist, n_gist], [n_gist, n_pred_neurons[0], n_pred_neurons[1]])])
 
 # build network
 adex_01 = AdEx_Layer(neuron_model_constants=AdEx,
@@ -459,9 +463,13 @@ aaa = (tf.transpose(adex_01.w['ig'])
 bbb = (tf.transpose(adex_01.w['gp1'])
                      @ adex_01.xtr_record[-adex_01.n_gist:, ::10]).numpy()/pamp
 fig, axs = plt.subplots(ncols=3, nrows=2)
+fig2, axs2 = plt.subplots(ncols=2, nrows=3)
 for i in range(3):
-    axs[0, i].imshow(aaa[:,i].reshape(10,10), cmap='Reds', vmin=0, vmax=3000)
-    axs[1, i].imshow(bbb[:, i].reshape(30, 30), cmap='Reds', vmin=0, vmax=3000)
+    axs[0, i].imshow(aaa[:,i].reshape(int(np.sqrt(n_gist)),int(np.sqrt(n_gist))),
+                     cmap='Reds', vmin=0, vmax=3000)
+    axs[1, i].imshow(bbb[:, i].reshape(int(np.sqrt(n_pred_neurons[0])), int(np.sqrt(n_pred_neurons[0]))),
+                     cmap='Reds', vmin=0, vmax=3000)
+
 plt.show()
 
 # plt.show()
