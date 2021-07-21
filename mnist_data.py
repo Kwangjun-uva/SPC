@@ -22,8 +22,9 @@ def create_mnist_set(nSample, nDigit, test_digits=None, shuffle=False):
 
     for i in range(nDigit):
 
-        rand_ids = np.random.choice(5000, nSample)
-        curr_digit = x_train[np.where(y_train == digits[i])][rand_ids].reshape(nSample, np.multiply(*x_train[0].shape))
+        digit = x_train[np.where(y_train == digits[i])]
+        rand_ids = np.random.choice(len(digit), nSample)
+        curr_digit = digit[rand_ids].reshape(nSample, np.multiply(*x_train[0].shape))
         norm_digits = curr_digit / np.linalg.norm(curr_digit, axis=1).reshape(nSample, 1)
         test_set[i*nSample:(i+1)*nSample] = 12000 * norm_digits + 600
 
@@ -51,7 +52,7 @@ def reordering(mat, idx):
 
     return new_mat
 
-def plot_mnist_set(testset, testset_idx, nDigit, nSample):
+def plot_mnist_set(testset, testset_idx, nDigit, nSample, savefolder):
 
     # fig.tight_layout()
     X = reordering(testset, testset_idx)
@@ -74,7 +75,7 @@ def plot_mnist_set(testset, testset_idx, nDigit, nSample):
     plt.xticks([])
     plt.yticks([])
     plt.title('MNIST images: nDigits={0}, nSample={1}'.format(nDigit, nSample))
-    # plt.savefig('figures/normalized_digits')
+    plt.savefig(savefolder + '/normalized_samples')
 
     return fig
 

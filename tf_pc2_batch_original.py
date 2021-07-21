@@ -452,8 +452,8 @@ sqrt_nstim = int(np.sqrt(n_stim))
 
 # plot the same test set
 # plot_imgset(img_set, 10, n_shape, n_batch)
-plot_mnist_set(testset=ext_current, testset_idx=test_set_idx, nDigit=n_shape, nSample=n_batch)
-plt.show()
+# plot_mnist_set(testset=ext_current, testset_idx=test_set_idx, nDigit=n_shape, nSample=n_batch)
+# plt.show()
 
 # ext_current = img_set.reshape(n_shape * n_batch, n_stim).T
 
