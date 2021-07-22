@@ -22,7 +22,7 @@ def pre_process(data_set, label_set, nDigit, nSample, classes):
 
     return training_set, training_labels
 
-def create_mnist_set(nSample, nDigit, test_digits=None, shuffle=False):
+def create_mnist_set(data_type, nSample, nDigit, test_digits=None, shuffle=False):
     if test_digits is not None:
         digits = test_digits
     else:
@@ -31,8 +31,8 @@ def create_mnist_set(nSample, nDigit, test_digits=None, shuffle=False):
         digits.sort()
 
     # load mnist dataset from tf.keras
-    mnist = tf.keras.datasets.mnist
-    (x_train, y_train), (x_test, y_test) = mnist.load_data()
+    # data_type = tf.keras.datasets.mnist
+    (x_train, y_train), (x_test, y_test) = data_type.load_data()
 
     training_set, training_labels = pre_process(x_train, y_train, nDigit, nSample, digits)
     test_set, test_labels = pre_process(x_test, y_test, nDigit, nSample, digits)
@@ -47,7 +47,6 @@ def create_mnist_set(nSample, nDigit, test_digits=None, shuffle=False):
         # test_labels = [test_labels[i] for i in training_set_idx]
 
     return training_set, training_labels, test_set, test_labels, digits, training_set_idx
-
 
 def reordering(mat, idx):
     len_mat = np.arange(len(idx))

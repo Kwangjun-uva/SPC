@@ -486,12 +486,12 @@ def save_data(sim_name):
     np.save(sim_name + '/test_data', training_set)
 
     np.savez(sim_name + '/training_dict',
-             digits=digits,
+             digits=classes,
              training_set_idx=training_set_idx,
              training_labels=training_labels,
              rep_set_idx=rep_set_idx)
     np.savez(sim_name + '/test_dict',
-             digits=digits,
+             digits=classes,
              test_set_idx=training_set_idx,
              training_labels=test_labels)
 
@@ -514,9 +514,8 @@ def matrix_rdm(matrix_data):
 def rdm_plots(model, testing_current, n_class, savefolder, trained):
     inp_size, sample_size = testing_current.shape
 
-    rdms = {'input': matrix_rdm(model.xtr_record[:adex_01.n_stim, :]).numpy().T}
-
     # RDM for input
+    rdms = {'input': matrix_rdm(model.xtr_record[:model.n_stim, :].numpy().T)}
 
     # RDM for each PC layer
     for pc_i in range(1, model.n_pc_layer + 1):
@@ -525,22 +524,23 @@ def rdm_plots(model, testing_current, n_class, savefolder, trained):
         curr_p_start_idx = sum(model.neurons_per_group[:3 * pc_i])
         curr_p_end_idx = sum(model.neurons_per_group[:3 * pc_i]) + source_p_size
 
-        rdms['P' + str(pc_i)] = matrix_rdm(model.w['pc' + str(pc_i)] @
-                                           model.xtr_record[curr_p_start_idx:curr_p_end_idx, :]).numpy().T
+        rdms['P' + str(pc_i)] = matrix_rdm((model.w['pc' + str(pc_i)] @
+                                           model.xtr_record[curr_p_start_idx:curr_p_end_idx, :]).numpy().T)
 
     # RDM for an ideal classifier
     tmat = np.ones((sample_size, sample_size))
+    nsample = int(sample_size / n_class)
     for i in range(n_class):
-        tmat[i * n_class: i * n_class + n_class, i * n_class: i * n_class + n_class] = 0
+        tmat[i * nsample: i * nsample + nsample, i * nsample: i * nsample + nsample] = 0
     rdms['ideal_classifier'] = tmat
 
     # 2nd order RDMs
     rdms2 = [1 - spearmanr(rdms['input'].flatten(),
                            rdms['P' + str(pc_i)].flatten())[0]
-             for pc_i in (1, model.n_pc_layer + 1)] + \
+             for pc_i in range(1, model.n_pc_layer + 1)] + \
             [1 - spearmanr(rdms['ideal_classifier'].flatten(),
                            rdms['P' + str(pc_i)].flatten())[0]
-             for pc_i in (1, model.n_pc_layer + 1)]
+             for pc_i in range(1, model.n_pc_layer + 1)]
 
     fig = plt.figure(figsize=(20, 10))
     gs = fig.add_gridspec(nrows=2, ncols=2 * (model.n_pc_layer + 2), wspace=0.1)
@@ -564,7 +564,7 @@ def rdm_plots(model, testing_current, n_class, savefolder, trained):
     r2_i.set_ylabel('1-Spearman corr')
     r2_i.label_outer()
     # plot deviation from ideal classifier
-    r2_t = fig.add_subplot(gs[1, adex_01.n_pc_layer + 2:])
+    r2_t = fig.add_subplot(gs[1, model.n_pc_layer + 2:])
     r2_t.bar(np.arange(model.n_pc_layer), rdms2[model.n_pc_layer:])
     r2_t.set_title('deviation from ideal classifier')
     r2_t.set_xticks(np.arange(model.n_pc_layer))
@@ -589,9 +589,12 @@ n_pc_layers = len(n_pred_neurons)
 n_gist = 128
 
 # create external input
-batch_size = 512
-n_shape = 10
-n_samples = 1024
+# batch_size = 512
+# n_shape = 10
+# n_samples = 1024
+batch_size = 128 * 3
+n_shape = 3
+n_samples = 128
 
 # simulate
 sim_dur = 500 * 10 ** (-3)  # ms
@@ -599,7 +602,7 @@ dt = 1 * 10 ** (-4)  # ms
 learning_window = 200 * 10 ** -3
 report_index = 1
 
-n_epoch = 100
+n_epoch = 10
 lrate = 1.5e-8
 reg_alpha = 5e-4
 
@@ -610,14 +613,16 @@ if os.path.exists(save_folder):
 os.mkdir(save_folder)
 
 # training_set, training_labels, test_set, test_labels, digits, training_set_idx
-training_set, training_labels, test_set, test_labels, digits, training_set_idx = create_mnist_set(nDigit=n_shape,
-                                                                                                  nSample=n_samples,
-                                                                                                  shuffle=True)
+training_set, training_labels, test_set, test_labels, classes, training_set_idx = create_mnist_set(data_type=tf.keras.datasets.fashion_mnist,
+                                                                                                   nDigit=n_shape,
+                                                                                                   nSample=n_samples,
+                                                                                                   shuffle=True)
+
 training_set *= pamp
 n_stim = training_set.shape[1]
 sqrt_nstim = int(np.sqrt(n_stim))
 
-rep_set_idx = pick_idx(training_labels, digits, batch_size)
+rep_set_idx = pick_idx(training_labels, classes, batch_size)
 
 # plot the same test set
 plot_mnist_set(testset=training_set, testset_idx=training_set_idx,
@@ -649,7 +654,8 @@ sse = adex_01.train_network(num_epoch=n_epoch,
 save_data(save_folder)
 
 # weight dist change
-w_fig = weight_dist(weights=adex_01.w['pc1'], weights_init=adex_01.w_init['pc1'])
+w_fig = weight_dist(savefolder=save_folder,
+                    weights=adex_01.w['pc1'], weights_init=adex_01.w_init['pc1'])
 
 # test inference on test data
 test_n_shape = n_shape
