@@ -4,8 +4,25 @@ import matplotlib.pyplot as plt
 import tensorflow as tf
 import numpy as np
 
-def create_mnist_set(nSample, nDigit, test_digits=None, shuffle=False):
+def pre_process(data_set, label_set, nDigit, nSample, classes):
 
+    training_set = np.zeros((nDigit * nSample, np.multiply(*data_set[0].shape)))
+    training_labels = []
+
+    for i in range(nDigit):
+        digit = data_set[np.where(label_set == classes[i])]
+        rand_ids = np.random.choice(len(digit), nSample)
+        curr_digit = digit[rand_ids].reshape(nSample, np.multiply(*data_set[0].shape))
+        norm_digits = curr_digit / np.linalg.norm(curr_digit, axis=1).reshape(nSample, 1)
+        training_set[i * nSample:(i + 1) * nSample] = 12000 * norm_digits + 600
+
+        training_labels.append(label_set[np.where(label_set == classes[i])][rand_ids])
+
+    training_labels = np.ravel(training_labels)
+
+    return training_set, training_labels
+
+def create_mnist_set(nSample, nDigit, test_digits=None, shuffle=False):
     if test_digits is not None:
         digits = test_digits
     else:
@@ -17,33 +34,20 @@ def create_mnist_set(nSample, nDigit, test_digits=None, shuffle=False):
     mnist = tf.keras.datasets.mnist
     (x_train, y_train), (x_test, y_test) = mnist.load_data()
 
-    test_set = np.zeros((nDigit * nSample, np.multiply(*x_train[0].shape)))
-    label_set = []
-
-    for i in range(nDigit):
-
-        digit = x_train[np.where(y_train == digits[i])]
-        rand_ids = np.random.choice(len(digit), nSample)
-        curr_digit = digit[rand_ids].reshape(nSample, np.multiply(*x_train[0].shape))
-        norm_digits = curr_digit / np.linalg.norm(curr_digit, axis=1).reshape(nSample, 1)
-        test_set[i*nSample:(i+1)*nSample] = 12000 * norm_digits + 600
-
-        label_set.append(y_train[np.where(y_train == digits[i])][rand_ids])
-
-    label_set = np.ravel(label_set)
-
-    test_set_idx = np.arange(nDigit * nSample)
+    training_set, training_labels = pre_process(x_train, y_train, nDigit, nSample, digits)
+    test_set, test_labels = pre_process(x_test, y_test, nDigit, nSample, digits)
+    training_set_idx = np.arange(nDigit * nSample)
 
     if shuffle:
         # shuffle the order
-        np.random.shuffle(test_set_idx)
-        test_set_shuffled = test_set[test_set_idx, :]
-        label_set_shuffled = [label_set[i] for i in test_set_idx]
+        np.random.shuffle(training_set_idx)
+        training_set = training_set[training_set_idx, :]
+        # test_set = test_set[training_set_idx, :]
+        training_labels = [training_labels[i] for i in training_set_idx]
+        # test_labels = [test_labels[i] for i in training_set_idx]
 
-        return test_set_shuffled, digits, test_set_idx, label_set_shuffled
+    return training_set, training_labels, test_set, test_labels, digits, training_set_idx
 
-    else:
-        return test_set, digits, test_set_idx, label_set
 
 def reordering(mat, idx):
     len_mat = np.arange(len(idx))
@@ -52,8 +56,8 @@ def reordering(mat, idx):
 
     return new_mat
 
-def plot_mnist_set(testset, testset_idx, nDigit, nSample, savefolder):
 
+def plot_mnist_set(testset, testset_idx, nDigit, nSample, savefolder):
     # fig.tight_layout()
     X = reordering(testset, testset_idx)
     # Plot images of the digits
@@ -67,11 +71,11 @@ def plot_mnist_set(testset, testset_idx, nDigit, nSample, savefolder):
     img = np.zeros((30 * nDigit, 30 * width))
     for i in range(nDigit):
         ix = 30 * i + 1
-        for j in range(width):#n_img_per_row):
+        for j in range(width):  # n_img_per_row):
             iy = 30 * j + 1
             img[ix:ix + 28, iy:iy + 28] = X[i * nSample + j].reshape((28, 28))
 
-    plt.imshow(img, cmap=plt.cm.Reds, vmin=1000e-12, vmax=4000e-12)
+    plt.imshow(img, cmap="Reds", vmin=1000e-12, vmax=4000e-12)
     plt.xticks([])
     plt.yticks([])
     plt.title('MNIST images: nDigits={0}, nSample={1}'.format(nDigit, nSample))
