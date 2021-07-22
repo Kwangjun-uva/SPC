@@ -24,11 +24,11 @@ def plot_pc1rep(input_img, l1rep, nDigit, nSample):
             l1_img[ix:ix + testset_x, iy:iy + testset_y] = l1rep[:, :, i + j * nSample]
             inp_img[ix:ix + testset_x, iy:iy + testset_y] = input_img[:, :, i + j * nSample]
 
-    fig, axs = plt.subplots(ncols=2, nrows=1)
-    axs[0].imshow(inp_img, cmap='Reds', vmin=0, vmax=3000)
+    fig, axs = plt.subplots(ncols=2, nrows=1, figsize=(nDigit * 3, nSample * 3))
+    axs[0].imshow(inp_img, cmap='Reds', vmin=600, vmax=3000)
     axs[0].axis('off')
     axs[0].set_title('Input MNIST images')
-    axs[1].imshow(l1_img, cmap='Reds', vmin=0, vmax=3000)
+    axs[1].imshow(l1_img, cmap='Reds', vmin=600, vmax=3000)
     axs[1].axis('off')
     axs[1].set_title('L1 representations of MNIST images')
     fig.tight_layout()
@@ -382,9 +382,9 @@ class AdEx_Layer(object):
 
                 fig, axs = plt.subplots(ncols=self.n_pc_layer + 1, nrows=n_class, figsize=(4 * 5, 4 * n_class))
                 for plt_idx in range(len(set_id)):
-                    input_plot = axs[plt_idx, 0].imshow(input_img[:, :, plt_idx], cmap='Reds', vmin=1000, vmax=4000)
+                    input_plot = axs[plt_idx, 0].imshow(input_img[:, :, plt_idx], cmap='Reds', vmin=600, vmax=4000)
                     fig.colorbar(input_plot, ax=axs[plt_idx, 0], shrink=0.6)
-                    reconst_plot = axs[plt_idx, 1].imshow(reconst_img[:, :, plt_idx], cmap='Reds', vmin=1000, vmax=4000)
+                    reconst_plot = axs[plt_idx, 1].imshow(reconst_img[:, :, plt_idx], cmap='Reds', vmin=600, vmax=4000)
                     fig.colorbar(reconst_plot, ax=axs[plt_idx, 1], shrink=0.6)
                     diff_plot = axs[plt_idx, 2].imshow(input_img[:, :, plt_idx] - reconst_img[:, :, plt_idx],
                                                        cmap='bwr',
@@ -412,7 +412,7 @@ class AdEx_Layer(object):
             sse_fig, sse_axs = plt.subplots(nrows=1, ncols=3, sharex=True)
             for i in range(1, self.n_pc_layer + 1):
                 bu_start_idx = sum(self.neurons_per_group[:3 * (i - 1)])
-                bu_end_idx = bu_start_idx + self.n_pred[i - 1]
+                bu_end_idx = bu_start_idx + self.neurons_per_group[3*(i-1)]
                 td_start_idx = sum(self.neurons_per_group[:3 * i])
                 td_end_idx = td_start_idx + self.n_pred[i - 1]
 
@@ -589,12 +589,9 @@ n_pc_layers = len(n_pred_neurons)
 n_gist = 128
 
 # create external input
-# batch_size = 512
-# n_shape = 10
-# n_samples = 1024
-batch_size = 128 * 3
-n_shape = 3
-n_samples = 128
+batch_size = 512
+n_shape = 10
+n_samples = 512
 
 # simulate
 sim_dur = 500 * 10 ** (-3)  # ms
@@ -602,9 +599,9 @@ dt = 1 * 10 ** (-4)  # ms
 learning_window = 200 * 10 ** -3
 report_index = 1
 
-n_epoch = 10
-lrate = 1.5e-8
-reg_alpha = 5e-4
+n_epoch = 100
+lrate = 0.1e-8
+reg_alpha = 1e-4
 
 # create a folder to save results
 save_folder = 'nD' + str(n_shape) + 'nS' + str(n_samples) + 'nEP' + str(n_epoch)
@@ -659,18 +656,17 @@ w_fig = weight_dist(savefolder=save_folder,
 
 # test inference on test data
 test_n_shape = n_shape
-test_n_sample = 100
+test_n_sample = n_samples
 
-testing_set = test_set[::test_n_sample]
+# testing_set = test_set[::test_n_sample]
 
-test_fig, test_current = adex_01.test_inference(imgs=testing_set.T,
-                                                nsample=test_n_sample,
-                                                ndigit=test_n_shape,
-                                                simul_dur=sim_dur, sim_dt=dt, sim_lt=learning_window,
-                                                train_or_test='test')
+test_fig = adex_01.test_inference(imgs=test_set,
+                                  nsample=test_n_sample, ndigit=test_n_shape,
+                                  simul_dur=sim_dur, sim_dt=dt, sim_lt=learning_window,
+                                  train_or_test='test')
 
 
 # rdm analysis
 rdm_fig = rdm_plots(model=adex_01,
-                    testing_current=testing_set.T, n_class=test_n_shape,
+                    testing_current=test_set.T, n_class=test_n_shape,
                     savefolder=save_folder, trained="test")

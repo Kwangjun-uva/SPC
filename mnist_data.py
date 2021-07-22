@@ -74,36 +74,10 @@ def plot_mnist_set(testset, testset_idx, nDigit, nSample, savefolder):
             iy = 30 * j + 1
             img[ix:ix + 28, iy:iy + 28] = X[i * nSample + j].reshape((28, 28))
 
-    plt.imshow(img, cmap="Reds", vmin=1000e-12, vmax=4000e-12)
+    plt.imshow(img, cmap="Reds", vmin=600e-12, vmax=4000e-12)
     plt.xticks([])
     plt.yticks([])
     plt.title('MNIST images: nDigits={0}, nSample={1}'.format(nDigit, nSample))
     plt.savefig(savefolder + '/normalized_samples')
 
     return fig
-
-# # create a testset (mnist)
-# test_set_shuffled, digits, test_set_idx, label_set_shuffled = create_mnist_set(nSample=10, nDigit=5)
-# plot_mnist_set(testset=test_set_shuffled, testset_idx=test_set_idx, nDigit=5, nSample=10)
-# plt.show()
-# def plot_L1rep(mat, testsetidx, nDigit, nSample):
-#
-#     X = reordering(mat, testsetidx)
-#     img_xy = int(np.sqrt(nI))
-#
-#     fig = plt.figure()
-#     img = np.zeros((30 * nDigit, 30 * nSample))
-#     for i in range(nDigit):
-#         ix = 30 * i + 1
-#         for j in range(nSample):
-#             iy = 30 * j + 1
-#             img[ix:ix + img_xy, iy:iy + img_xy] = X[i * nSample + j].reshape((img_xy, img_xy))
-#
-#     plt.imshow(img, cmap=plt.cm.Reds)
-#     plt.xticks([])
-#     plt.yticks([])
-#     plt.title('L1 representations of MNIST images')
-#     plt.savefig('figures/L1rep')
-#     plt.show()
-#
-#     return fig
