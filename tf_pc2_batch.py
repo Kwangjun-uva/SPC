@@ -24,7 +24,7 @@ def plot_pc1rep(input_img, l1rep, nDigit, nSample):
             l1_img[ix:ix + testset_x, iy:iy + testset_y] = l1rep[:, :, i + j * nSample]
             inp_img[ix:ix + testset_x, iy:iy + testset_y] = input_img[:, :, i + j * nSample]
 
-    fig, axs = plt.subplots(ncols=2, nrows=1, figsize=(nDigit * 3, nSample * 3))
+    fig, axs = plt.subplots(ncols=2, nrows=1, figsize=(nDigit * 1, nSample * 1))
     axs[0].imshow(inp_img, cmap='Reds', vmin=600, vmax=3000)
     axs[0].axis('off')
     axs[0].set_title('Input MNIST images')
@@ -245,7 +245,8 @@ class AdEx_Layer(object):
 
             norm_factor = 0.1 * pred_size
 
-            self.w['pc' + str(pc_layer_idx + 1)] = tf.random.normal((err_size, pred_size), 1.0, 0.3) / norm_factor
+            # self.w['pc' + str(pc_layer_idx + 1)] = tf.random.normal((err_size, pred_size), 1.0, 0.3) / norm_factor
+            self.w['pc' + str(pc_layer_idx + 1)] = tf.abs(tf.random.normal((err_size, pred_size), 0.0, 0.3) / norm_factor)
             self.w_init['pc' + str(pc_layer_idx + 1)] = self.w['pc' + str(pc_layer_idx + 1)]
 
     def connect_gist(self, conn_p, max_w):
@@ -286,7 +287,7 @@ class AdEx_Layer(object):
             err_idx = sum(self.neurons_per_group[:pc_layer_idx * 3 + 1])
             err_size = self.neurons_per_group[pc_layer_idx * 3 + 1]
             pred_idx = sum(self.neurons_per_group[:pc_layer_idx * 3 + 3])
-            pred_size = self.neurons_per_group[pc_layer_idx * 3 + 3]
+            pred_size = self.n_pred[pc_layer_idx]
 
             xtr_ep = self.xtr_record[err_idx: err_idx + err_size]
             xtr_en = self.xtr_record[err_idx + err_size: err_idx + 2 * err_size]
@@ -429,16 +430,6 @@ class AdEx_Layer(object):
             sse_fig.savefig(self.model_dir + '/log_sse.png'.format(epoch_i + 1))
             plt.close(sse_fig)
 
-            # sse.append(tf.reduce_sum(tf.reduce_mean((l1_pred - l0_input) ** 2, axis=2)).numpy())
-
-            # plt.figure()
-            # plt.plot(np.arange(epoch_i+1), np.log(sse))
-            # plt.xlabel('epoch #')
-            # plt.ylabel('log (SSE)')
-            # plt.savefig(self.model_dir + '/log_sse.png'.format(epoch_i + 1))
-            # plt.close()
-            # plt.show()
-
         end_time = time.time()
         update_sim_time(self.model_dir, '\nsimulation : {0:.2f} sec'.format(end_time - start_time))
         # print('simulation : {0:.2f} sec'.format(end_time - start_time))
@@ -512,7 +503,7 @@ def matrix_rdm(matrix_data):
 
 
 def rdm_plots(model, testing_current, n_class, savefolder, trained):
-    inp_size, sample_size = testing_current.shape
+    inp_size, sample_size = testing_current.T.shape
 
     # RDM for input
     rdms = {'input': matrix_rdm(model.xtr_record[:model.n_stim, :].numpy().T)}
@@ -541,6 +532,11 @@ def rdm_plots(model, testing_current, n_class, savefolder, trained):
             [1 - spearmanr(rdms['ideal_classifier'].flatten(),
                            rdms['P' + str(pc_i)].flatten())[0]
              for pc_i in range(1, model.n_pc_layer + 1)]
+
+    with open(savefolder + '/rdm1_dict.pickle', 'wb') as handle:
+        pickle.dump(rdms, handle, protocol=pickle.HIGHEST_PROTOCOL)
+    with open(savefolder + '/rdm2_dict.pickle', 'wb') as handle:
+        pickle.dump(rdms2, handle, protocol=pickle.HIGHEST_PROTOCOL)
 
     fig = plt.figure(figsize=(20, 10))
     gs = fig.add_gridspec(nrows=2, ncols=2 * (model.n_pc_layer + 2), wspace=0.1)
@@ -590,17 +586,17 @@ n_gist = 128
 
 # create external input
 batch_size = 512
-n_shape = 10
+n_shape = 3
 n_samples = 512
 
 # simulate
 sim_dur = 500 * 10 ** (-3)  # ms
 dt = 1 * 10 ** (-4)  # ms
-learning_window = 200 * 10 ** -3
+learning_window = 100 * 10 ** -3
 report_index = 1
 
-n_epoch = 100
-lrate = 0.1e-8
+n_epoch = 5
+lrate = 10.1e-8
 reg_alpha = 1e-4
 
 # create a folder to save results
@@ -627,9 +623,9 @@ plot_mnist_set(testset=training_set, testset_idx=training_set_idx,
                savefolder=save_folder)
 
 conn_vals = np.array([conn_probs(a_i, b_i)
-                      for a_i, b_i in zip([n_stim] + [n_gist] * n_pc_layers, [n_gist] + n_pred_neurons)])
+                      for a_i, b_i in zip([n_stim] + [n_gist] * n_pc_layers, [n_gist] + n_pred_neurons)]) * 0.05
 
-max_vals = np.array([1] * (n_pc_layers + 1)) * 0.25
+max_vals = np.array([1] * (n_pc_layers + 1)) * 0.25 * 5
 
 # build network
 adex_01 = AdEx_Layer(sim_directory=save_folder,
@@ -652,15 +648,17 @@ save_data(save_folder)
 
 # weight dist change
 w_fig = weight_dist(savefolder=save_folder,
-                    weights=adex_01.w['pc1'], weights_init=adex_01.w_init['pc1'])
+                    weights=adex_01.w, weights_init=adex_01.w_init,
+                    n_pc=adex_01.n_pc_layer)
 
 # test inference on test data
 test_n_shape = n_shape
-test_n_sample = n_samples
+test_n_sample = 16
+test_iter_idx = int(n_samples/test_n_sample)
 
-# testing_set = test_set[::test_n_sample]
+testing_set = test_set[::test_iter_idx]
 
-test_fig = adex_01.test_inference(imgs=test_set,
+test_fig = adex_01.test_inference(imgs=testing_set,
                                   nsample=test_n_sample, ndigit=test_n_shape,
                                   simul_dur=sim_dur, sim_dt=dt, sim_lt=learning_window,
                                   train_or_test='test')
@@ -668,5 +666,5 @@ test_fig = adex_01.test_inference(imgs=test_set,
 
 # rdm analysis
 rdm_fig = rdm_plots(model=adex_01,
-                    testing_current=test_set.T, n_class=test_n_shape,
+                    testing_current=testing_set, n_class=test_n_shape,
                     savefolder=save_folder, trained="test")

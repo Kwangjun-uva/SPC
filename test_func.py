@@ -31,21 +31,27 @@ def error_raster(fr_array, n_stim, sample_neuron_idx):
 
     return (ep_fr + en_fr > 1).any(), fig
 
-def weight_dist(savefolder, weights, weights_init):
+def weight_dist(savefolder, weights, weights_init, n_pc):
 
-    init_w = weights_init.numpy().flatten()
-    updated_w = weights.numpy().flatten()
-    nonzero_w = updated_w[updated_w>0]
+    fig, axs = plt.subplots(nrows=2, ncols=n_pc, figsize=(4 * n_pc, 5))
+    for plt_idx, (key, grp) in enumerate(weights.items()):
+        if 'pc' in key:
+            init_w = weights_init[key].numpy().flatten()
+            updated_w = grp.numpy().flatten()
+            nonzero_w = updated_w[updated_w>0]
 
-    fig = plt.figure()
-    plt.subplot(211)
-    plt.hist(init_w, bins=100)
-    plt.title('initial weight distribution')
-    plt.subplot(212)
-    plt.hist(nonzero_w, bins=100,
-             label='nonzero W = {0:.2f}%'.format(len(nonzero_w) / len(updated_w) * 100))
-    plt.title('weight distribution')
-    plt.legend()
-    plt.savefig(savefolder + '/weight_dist_change.png')
+            # initial weight distribution
+            axs[0, plt_idx].hist(init_w, bins=100)
+            axs[0, plt_idx].set_title(key + ' initial weight distribution')
+            # weight distribution after learning
+            axs[1, plt_idx].hist(nonzero_w, bins=100,
+                     label='nonzero W = {0:.2f}%'.format(len(nonzero_w) / len(updated_w) * 100))
+            axs[1, plt_idx].set_title(key + ' weight distribution')
+            axs[1, plt_idx].legend()
+        else:
+            pass
+
+    fig.tight_layout()
+    fig.savefig(savefolder + '/weight_dist_change.png')
 
     return fig
