@@ -5,7 +5,7 @@ import time
 from test_func import weight_dist
 from mnist_data import create_mnist_set, plot_mnist_set
 from datetime import timedelta
-import pickle
+import pickle5 as pickle
 from scipy.stats import spearmanr
 import os
 from datetime import datetime
@@ -431,8 +431,7 @@ class AdEx_Layer(object):
             plt.close(sse_fig)
 
         end_time = time.time()
-        update_sim_time(self.model_dir, '\nsimulation : {0:.2f} sec'.format(end_time - start_time))
-        # print('simulation : {0:.2f} sec'.format(end_time - start_time))
+        update_sim_time(self.model_dir, '\nsimulation : {0}'.format(str(timedelta(seconds=end_time - start_time))))
 
         return sse
 
@@ -586,18 +585,18 @@ n_gist = 128
 
 # create external input
 batch_size = 512
-n_shape = 3
-n_samples = 512
+n_shape = 10
+n_samples = 1024
 
 # simulate
 sim_dur = 500 * 10 ** (-3)  # ms
 dt = 1 * 10 ** (-4)  # ms
-learning_window = 100 * 10 ** -3
+learning_window = 200 * 10 ** -3
 report_index = 1
 
-n_epoch = 5
-lrate = 10.1e-8
-reg_alpha = 1e-4
+n_epoch = 50
+lrate = 10.0e-8
+reg_alpha = 1e-3
 
 # create a folder to save results
 save_folder = 'nD' + str(n_shape) + 'nS' + str(n_samples) + 'nEP' + str(n_epoch)
@@ -605,8 +604,11 @@ if os.path.exists(save_folder):
     save_folder += datetime.today().strftime('_%Y_%m_%d_%H_%M')
 os.mkdir(save_folder)
 
+# print how many GPUs
+update_sim_time(save_folder, "Num GPUs Available: {0}\n".format(tf.config.list_physical_devices('GPU')))
+
 # training_set, training_labels, test_set, test_labels, digits, training_set_idx
-training_set, training_labels, test_set, test_labels, classes, training_set_idx = create_mnist_set(data_type=tf.keras.datasets.fashion_mnist,
+training_set, training_labels, test_set, test_labels, classes, training_set_idx = create_mnist_set(data_type=tf.keras.datasets.mnist,
                                                                                                    nDigit=n_shape,
                                                                                                    nSample=n_samples,
                                                                                                    shuffle=True)
@@ -635,13 +637,14 @@ adex_01 = AdEx_Layer(sim_directory=save_folder,
                      num_stim=n_stim,
                      gist_num=n_gist, gist_connp=conn_vals, gist_maxw=max_vals)
 
+
 # train_network(self, num_epoch, sim_dur, sim_dt, sim_lt, lr, reg_a, input_current, n_shape, n_batch, set_idx):
 sse = adex_01.train_network(num_epoch=n_epoch,
                             simul_dur=sim_dur, sim_dt=dt, sim_lt=learning_window,
                             lr=lrate, reg_a=reg_alpha,
                             input_current=training_set.T,
                             n_class=n_shape, batch_size=batch_size,
-                            set_idx=rep_set_idx, report_idx=report_index)
+                                set_idx=rep_set_idx, report_idx=report_index)
 
 # save simulation data
 save_data(save_folder)
