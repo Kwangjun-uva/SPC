@@ -1,0 +1,64 @@
+Num GPUs Available: [PhysicalDevice(name='/physical_device:GPU:0', device_type='GPU'), PhysicalDevice(name='/physical_device:GPU:1', device_type='GPU')]
+currently running on /device:GPU:1
+
+epoch #1/10 = 38.84, iter #1/5 = 38.84 sec
+epoch #1/10 = 77.12, iter #2/5 = 38.28 sec
+epoch #1/10 = 115.55, iter #3/5 = 38.43 sec
+epoch #1/10 = 154.01, iter #4/5 = 38.45 sec
+epoch #1/10 = 192.46, iter #5/5 = 38.46 sec
+***** time remaining = 0:29:03.251879
+epoch #2/10 = 38.32, iter #1/5 = 38.32 sec
+epoch #2/10 = 76.79, iter #2/5 = 38.47 sec
+epoch #2/10 = 115.28, iter #3/5 = 38.48 sec
+epoch #2/10 = 153.78, iter #4/5 = 38.51 sec
+epoch #2/10 = 192.30, iter #5/5 = 38.52 sec
+***** time remaining = 0:25:48.491914
+epoch #3/10 = 38.32, iter #1/5 = 38.32 sec
+epoch #3/10 = 76.86, iter #2/5 = 38.54 sec
+epoch #3/10 = 115.40, iter #3/5 = 38.54 sec
+epoch #3/10 = 153.97, iter #4/5 = 38.57 sec
+epoch #3/10 = 192.59, iter #5/5 = 38.62 sec
+***** time remaining = 0:22:35.285450
+epoch #4/10 = 38.49, iter #1/5 = 38.49 sec
+epoch #4/10 = 77.18, iter #2/5 = 38.69 sec
+epoch #4/10 = 115.87, iter #3/5 = 38.69 sec
+epoch #4/10 = 154.58, iter #4/5 = 38.71 sec
+epoch #4/10 = 193.27, iter #5/5 = 38.69 sec
+***** time remaining = 0:19:22.900274
+epoch #5/10 = 38.55, iter #1/5 = 38.55 sec
+epoch #5/10 = 77.36, iter #2/5 = 38.81 sec
+epoch #5/10 = 116.09, iter #3/5 = 38.73 sec
+epoch #5/10 = 155.31, iter #4/5 = 39.22 sec
+epoch #5/10 = 195.03, iter #5/5 = 39.72 sec
+***** time remaining = 0:16:11.477440
+epoch #6/10 = 39.27, iter #1/5 = 39.27 sec
+epoch #6/10 = 77.97, iter #2/5 = 38.71 sec
+epoch #6/10 = 116.67, iter #3/5 = 38.69 sec
+epoch #6/10 = 155.39, iter #4/5 = 38.72 sec
+epoch #6/10 = 194.21, iter #5/5 = 38.82 sec
+***** time remaining = 0:12:57.925388
+epoch #7/10 = 38.60, iter #1/5 = 38.60 sec
+epoch #7/10 = 77.29, iter #2/5 = 38.69 sec
+epoch #7/10 = 115.98, iter #3/5 = 38.69 sec
+epoch #7/10 = 154.70, iter #4/5 = 38.72 sec
+epoch #7/10 = 193.42, iter #5/5 = 38.72 sec
+***** time remaining = 0:09:43.487241
+epoch #8/10 = 38.53, iter #1/5 = 38.53 sec
+epoch #8/10 = 77.24, iter #2/5 = 38.71 sec
+epoch #8/10 = 115.94, iter #3/5 = 38.70 sec
+epoch #8/10 = 154.65, iter #4/5 = 38.71 sec
+epoch #8/10 = 193.89, iter #5/5 = 39.24 sec
+***** time remaining = 0:06:29.128213
+epoch #9/10 = 39.39, iter #1/5 = 39.39 sec
+epoch #9/10 = 78.08, iter #2/5 = 38.69 sec
+epoch #9/10 = 116.78, iter #3/5 = 38.70 sec
+epoch #9/10 = 155.46, iter #4/5 = 38.68 sec
+epoch #9/10 = 194.14, iter #5/5 = 38.68 sec
+***** time remaining = 0:03:14.646035
+epoch #10/10 = 38.52, iter #1/5 = 38.52 sec
+epoch #10/10 = 77.23, iter #2/5 = 38.70 sec
+epoch #10/10 = 115.93, iter #3/5 = 38.70 sec
+epoch #10/10 = 154.61, iter #4/5 = 38.68 sec
+epoch #10/10 = 193.30, iter #5/5 = 38.69 sec
+***** time remaining = 0:00:00
+simulation : 0:32:27.604835
