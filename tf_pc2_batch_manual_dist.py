@@ -297,12 +297,12 @@ class AdEx_Layer(object):
             xtr_en = self.xtr_record[err_idx + err_size: err_idx + 2 * err_size]
             xtr_p = self.xtr_record[pred_idx: pred_idx + pred_size]
 
-            dw_all_pos = lr * tf.einsum('ij,kj->ikj', xtr_ep / 10 ** -12, xtr_p / 10 ** -12)
-            dw_all_neg = lr * tf.einsum('ij,kj->ikj', xtr_en / 10 ** -12, xtr_p / 10 ** -12)
+            dw_all_pos = lr[pc_layer_idx] * tf.einsum('ij,kj->ikj', xtr_ep / 10 ** -12, xtr_p / 10 ** -12)
+            dw_all_neg = lr[pc_layer_idx] * tf.einsum('ij,kj->ikj', xtr_en / 10 ** -12, xtr_p / 10 ** -12)
 
-            dw_mean_pos = tf.reduce_mean(dw_all_pos, axis=2) - 2 * alpha_w * tf.abs(
+            dw_mean_pos = tf.reduce_mean(dw_all_pos, axis=2) - 2 * alpha_w[pc_layer_idx] * tf.abs(
                 self.w['pc' + str(pc_layer_idx + 1)])
-            dw_mean_neg = tf.reduce_mean(dw_all_neg, axis=2) - 2 * alpha_w * tf.abs(
+            dw_mean_neg = tf.reduce_mean(dw_all_neg, axis=2) - 2 * alpha_w[pc_layer_idx] * tf.abs(
                 self.w['pc' + str(pc_layer_idx + 1)])
 
             dws = tf.add(dw_mean_pos, -dw_mean_neg)
@@ -590,7 +590,7 @@ n_gist = 128
 # create external input
 batch_size = 512
 n_shape = 5
-n_samples = 1024
+n_samples = 512
 
 # simulate
 sim_dur = 500 * 10 ** (-3)  # ms
@@ -598,9 +598,9 @@ dt = 1 * 10 ** (-4)  # ms
 learning_window = 200 * 10 ** -3
 report_index = 1
 
-n_epoch = 30
-lrate = 5.0 * 10 ** -8
-reg_alpha = 5.0 * 10 ** -4
+n_epoch = 10
+lrate = np.array([5.0, 2.5, 1.0]) * 10 ** -8
+reg_alpha = np.array([5.0, 2.5, 1.0]) * 10 ** -4
 
 # training_set, training_labels, test_set, test_labels, digits, training_set_idx
 if sys.argv[1] == 'mnist':
