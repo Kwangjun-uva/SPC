@@ -588,9 +588,9 @@ n_pc_layers = len(n_pred_neurons)
 n_gist = 128
 
 # create external input
-batch_size = 512
-n_shape = 5
-n_samples = 512
+batch_size = 256
+n_shape = 3
+n_samples = 256
 
 # simulate
 sim_dur = 500 * 10 ** (-3)  # ms
@@ -599,8 +599,8 @@ learning_window = 200 * 10 ** -3
 report_index = 1
 
 n_epoch = 10
-lrate = np.array([5.0, 2.5, 1.0]) * 10 ** -8
-reg_alpha = np.array([5.0, 2.5, 1.0]) * 10 ** -4
+lrate = np.array([7.5, 5.0, 2.5]) * 10 ** -8
+reg_alpha = np.array([5.0, 5.0, 5.0]) * 10 ** -4
 
 # training_set, training_labels, test_set, test_labels, digits, training_set_idx
 if sys.argv[1] == 'mnist':

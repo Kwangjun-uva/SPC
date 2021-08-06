@@ -404,16 +404,20 @@ class AdEx_Layer(object):
 pamp = 10 ** -12
 
 # network parameters
-n_pc_layers = 2
-n_pred_neurons = [225, 100]
-n_gist = 100
+n_pc_layers = 3
+n_pred_neurons = [1024, 512, 256]
+n_gist = 128
 
 # create external input
 batch_size = 30
 n_shape = 3
 n_samples = 10
 
-ext_current, digits, test_set_idx, label_set_shuffled = create_mnist_set(nDigit=n_shape, nSample=n_samples, shuffle=False)
+# ext_current, digits, test_set_idx, label_set_shuffled = create_mnist_set(nDigit=n_shape, nSample=n_samples, shuffle=False)
+ext_current, label_set_shuffled, test_set, test_labels, classes, test_set_idx = create_mnist_set(data_type=tf.keras.datasets.mnist,
+                                                                                                   nDigit=n_shape,
+                                                                                                   nSample=n_samples,
+                                                                                                   shuffle=True)
 ext_current *= pamp
 n_stim = ext_current.shape[1]
 sqrt_nstim = int(np.sqrt(n_stim))
@@ -429,14 +433,20 @@ plt.show()
 def conn_probs(n_a, n_b):
     return np.sqrt(n_b/n_a) * 0.025
 
+# conn_vals = np.array([conn_probs(a_i, b_i)
+#                       for a_i, b_i in zip([n_stim, n_gist, n_gist], [n_gist, n_pred_neurons[0], n_pred_neurons[1]])])
+#
+# # max_vals = np.array([250, 300, 300]) / 550
+# max_vals = np.array([1, 1, 1]) * 0.25
+#
+# # conn_vals = np.array([0.02, 0.05, 0.05])
+# max_vals = 0.25 * np.array([np.sqrt(b/a) for a,b in zip([n_stim, n_gist, n_gist], [n_gist, n_pred_neurons[0], n_pred_neurons[1]])])
+
+
 conn_vals = np.array([conn_probs(a_i, b_i)
-                      for a_i, b_i in zip([n_stim, n_gist, n_gist], [n_gist, n_pred_neurons[0], n_pred_neurons[1]])])
+                      for a_i, b_i in zip([n_stim] + [n_gist] * n_pc_layers, [n_gist] + n_pred_neurons)]) * 0.05
 
-# max_vals = np.array([250, 300, 300]) / 550
-max_vals = np.array([1, 1, 1]) * 0.25
-
-# conn_vals = np.array([0.02, 0.05, 0.05])
-max_vals = 0.25 * np.array([np.sqrt(b/a) for a,b in zip([n_stim, n_gist, n_gist], [n_gist, n_pred_neurons[0], n_pred_neurons[1]])])
+max_vals = np.array([1] * (n_pc_layers + 1)) * 0.25 * 5
 
 # build network
 adex_01 = AdEx_Layer(neuron_model_constants=AdEx,
@@ -446,7 +456,7 @@ adex_01 = AdEx_Layer(neuron_model_constants=AdEx,
                      gist_num=n_gist, gist_connp=conn_vals, gist_maxw=max_vals)
 
 # simulate
-sim_dur = 1000 * 10 ** (-3)  # ms
+sim_dur = 500 * 10 ** (-3)  # ms
 dt = 1 * 10 ** (-4)  # ms
 learning_window = 200 * 10 ** -3
 
