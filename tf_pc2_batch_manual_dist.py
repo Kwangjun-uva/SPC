@@ -204,42 +204,44 @@ class AdEx_Layer(object):
             self.Isyn[-self.n_gist:, :].assign(tf.zeros(shape=self.Isyn[-self.n_gist:, :].shape, dtype=tf.float32))
 
         for pc_layer_idx in range(self.n_pc_layer):
+            self.Isyn_by_layer(pc_layer_idx)
 
-            # index of current prediction layer
-            curr_p_idx = sum(self.neurons_per_group[:pc_layer_idx * 3])
-            curr_p_size = self.neurons_per_group[pc_layer_idx * 3]
+    def Isyn_by_layer(self, pc_layer_idx):
+        # index of current prediction layer
+        curr_p_idx = sum(self.neurons_per_group[:pc_layer_idx * 3])
+        curr_p_size = self.neurons_per_group[pc_layer_idx * 3]
 
-            # index of
-            next_p_idx = sum(self.neurons_per_group[:pc_layer_idx * 3 + 3])
-            next_p_size = self.neurons_per_group[pc_layer_idx * 3 + 3]
+        # index of
+        next_p_idx = sum(self.neurons_per_group[:pc_layer_idx * 3 + 3])
+        next_p_size = self.neurons_per_group[pc_layer_idx * 3 + 3]
 
-            bu_sensory = self.x_tr[curr_p_idx: curr_p_idx + curr_p_size, :] * self.w_const
-            td_pred = self.w['pc' + str(pc_layer_idx + 1)] @ (
-                    self.x_tr[next_p_idx:next_p_idx + next_p_size, :] * self.w_const)
+        bu_sensory = self.x_tr[curr_p_idx: curr_p_idx + curr_p_size, :] * self.w_const
+        td_pred = self.w['pc' + str(pc_layer_idx + 1)] @ (
+                self.x_tr[next_p_idx:next_p_idx + next_p_size, :] * self.w_const)
 
-            # E+ = I - P
-            self.Isyn[curr_p_idx + curr_p_size:curr_p_idx + 2 * curr_p_size, :].assign(tf.add(bu_sensory, -td_pred))
-            # E- = -I + P
-            self.Isyn[curr_p_idx + 2 * curr_p_size:next_p_idx, :].assign(tf.add(-bu_sensory, td_pred))
+        # E+ = I - P
+        self.Isyn[curr_p_idx + curr_p_size:curr_p_idx + 2 * curr_p_size, :].assign(tf.add(bu_sensory, -td_pred))
+        # E- = -I + P
+        self.Isyn[curr_p_idx + 2 * curr_p_size:next_p_idx, :].assign(tf.add(-bu_sensory, td_pred))
 
-            # P = bu_error + td_error
-            bu_err_pos = tf.transpose(self.w['pc' + str(pc_layer_idx + 1)]) @ (
-                    self.x_tr[curr_p_idx + curr_p_size:curr_p_idx + 2 * curr_p_size, :] * self.w_const)
-            bu_err_neg = tf.transpose(self.w['pc' + str(pc_layer_idx + 1)]) @ (
-                    self.x_tr[curr_p_idx + 2 * curr_p_size:next_p_idx, :] * self.w_const)
-            gist = tf.transpose(self.w['gp' + str(pc_layer_idx + 1)]) @ (self.x_tr[-self.n_gist:, :] * self.w_const)
+        # P = bu_error + td_error
+        bu_err_pos = tf.transpose(self.w['pc' + str(pc_layer_idx + 1)]) @ (
+                self.x_tr[curr_p_idx + curr_p_size:curr_p_idx + 2 * curr_p_size, :] * self.w_const)
+        bu_err_neg = tf.transpose(self.w['pc' + str(pc_layer_idx + 1)]) @ (
+                self.x_tr[curr_p_idx + 2 * curr_p_size:next_p_idx, :] * self.w_const)
+        gist = tf.transpose(self.w['gp' + str(pc_layer_idx + 1)]) @ (self.x_tr[-self.n_gist:, :] * self.w_const)
 
-            if pc_layer_idx < self.n_pc_layer - 1:
-                td_err_pos = self.x_tr[next_p_idx + next_p_size:next_p_idx + 2 * next_p_size] * self.w_const
-                td_err_neg = self.x_tr[next_p_idx + 2 * next_p_size:next_p_idx + 3 * next_p_size] * self.w_const
-                self.Isyn[next_p_idx:next_p_idx + next_p_size, :].assign(
+        if pc_layer_idx < self.n_pc_layer - 1:
+            td_err_pos = self.x_tr[next_p_idx + next_p_size:next_p_idx + 2 * next_p_size] * self.w_const
+            td_err_neg = self.x_tr[next_p_idx + 2 * next_p_size:next_p_idx + 3 * next_p_size] * self.w_const
+            self.Isyn[next_p_idx:next_p_idx + next_p_size, :].assign(
+                tf.add(
                     tf.add(
-                        tf.add(
-                            tf.add(bu_err_pos, -bu_err_neg),
-                            tf.add(-td_err_pos, td_err_neg)),
-                        gist))
-            else:
-                self.Isyn[next_p_idx:next_p_idx + next_p_size, :].assign(tf.add(tf.add(bu_err_pos, -bu_err_neg), gist))
+                        tf.add(bu_err_pos, -bu_err_neg),
+                        tf.add(-td_err_pos, td_err_neg)),
+                    gist))
+        else:
+            self.Isyn[next_p_idx:next_p_idx + next_p_size, :].assign(tf.add(tf.add(bu_err_pos, -bu_err_neg), gist))
 
     def connect_pc(self):
 
@@ -283,7 +285,6 @@ class AdEx_Layer(object):
 
             self.xtr_record.assign_add(self.x_tr * self.w_const)
 
-    # def hebbian_dw(self, source, target, lr, reg_alpha):
     def weight_update(self, lr, alpha_w):
 
         for pc_layer_idx in range(self.n_pc_layer):
@@ -375,7 +376,7 @@ class AdEx_Layer(object):
                                                                      iter_i + 1, n_batch, end_iter_time - iter_time))
 
             if ((epoch_i + 1) % report_idx == 0):  # and (len(set_idx) > iter_i):
-                set_id = set_idx[0]  # [iter_i]
+                set_id = set_idx  # [iter_i]
                 # plot progres
                 input_img = self.xtr_record[:self.n_stim].numpy()[:, set_id].reshape(sqrt_nstim, sqrt_nstim,
                                                                                      len(set_id)) / pamp
@@ -414,7 +415,7 @@ class AdEx_Layer(object):
             #     self.w['pc1'] @ self.xtr_record[n_stim * 3:n_stim * 3 + self.n_pred[0], :],
             #     (sqrt_nstim, sqrt_nstim, self.batch_size)) / pamp
 
-            sse_fig, sse_axs = plt.subplots(nrows=1, ncols=3, sharex=True)
+            sse_fig, sse_axs = plt.subplots(nrows=3, ncols=1, sharex=True)
             for i in range(1, self.n_pc_layer + 1):
                 bu_start_idx = sum(self.neurons_per_group[:3 * (i - 1)])
                 bu_end_idx = bu_start_idx + self.neurons_per_group[3*(i-1)]
@@ -445,20 +446,28 @@ def pick_idx(idx_set, digits, size_batch):
 
     n_batch = int(len(idx_set) / size_batch)
 
-    ll = [idx_set[i * size_batch:i * size_batch + size_batch] for i in range(n_batch)]
+    # ll = [idx_set[i * size_batch:i * size_batch + size_batch] for i in range(n_batch)]
     digit_cols = np.zeros(len(digits))
     rrr = []
-
-    for j in range(len(ll)):
-        rri = []
-        for i, digit_i in enumerate(digits):
-            if digit_i in ll[j]:
-                ssi = ll[j].index(digit_i)
-                if digit_cols[i] < 100:
-                    rri.append(ssi)
-                    digit_cols[i] = 100
-        if rri:
-            rrr.append(rri)
+    #
+    # # # loop over batches (i.e. number of batches = len(ll))
+    # # for j in range(len(ll)):
+    # #     rri = []
+    # #     # loop over classes
+    # #     for i, digit_i in enumerate(digits):
+    # #         if digit_i in ll[j]:
+    # #             ssi = ll[j].index(digit_i)
+    # #             if digit_cols[i] < 100:
+    # #                 rri.append(ssi)
+    # #                 digit_cols[i] = 100
+    # #     if rri:
+    # #         rrr.append(rri)
+    ll = idx_set[-size_batch:]
+    for i, digit_i in enumerate(digits):
+        ssi = ll.index(digit_i)
+        if digit_cols[i] < 100:
+            rrr.append(ssi)
+            digit_cols[i] = 100
 
     return rrr
 
@@ -472,8 +481,10 @@ def save_data(sim_name):
     save_ws = {}
     for key, ws in adex_01.w.items():
         save_ws[key] = ws.numpy()
-    with open(sim_name + '/weight_dict.pickle', 'wb') as handle:
-        pickle.dump(save_ws, handle, protocol=pickle.HIGHEST_PROTOCOL)
+    with open(sim_name + '/weight_dict.pickle', 'wb') as w_handle:
+        pickle.dump(save_ws, w_handle, protocol=pickle.HIGHEST_PROTOCOL)
+    with open(sim_name + '/sse_dict.pickle', 'wb') as sse_handle:
+        pickle.dump(sse, sse_handle, protocol=pickle.HIGHEST_PROTOCOL)
 
     # save training data
     np.save(sim_name + '/training_data', training_set)
@@ -583,14 +594,14 @@ with open('adex_constants.pickle', 'rb') as f:
 pamp = 10 ** -12
 
 # network parameters
-n_pred_neurons = [1024, 512, 256]
+n_pred_neurons = [900, 1296, 1156] # preferably each entry is an integer that has an integer square root
 n_pc_layers = len(n_pred_neurons)
 n_gist = 128
 
 # create external input
 batch_size = 256
 n_shape = 3
-n_samples = 256
+n_samples = 1024
 
 # simulate
 sim_dur = 500 * 10 ** (-3)  # ms
@@ -598,15 +609,16 @@ dt = 1 * 10 ** (-4)  # ms
 learning_window = 200 * 10 ** -3
 report_index = 1
 
-n_epoch = 10
-lrate = np.array([7.5, 5.0, 2.5]) * 10 ** -8
-reg_alpha = np.array([5.0, 5.0, 5.0]) * 10 ** -4
+n_epoch = 30
+lrate = np.array([1.0, 1.0, 1.0]) * 10 ** -8
+reg_alpha = np.array([5.0, 5.0, 5.0]) * 10 ** -3
 
 # training_set, training_labels, test_set, test_labels, digits, training_set_idx
 if sys.argv[1] == 'mnist':
     keras_data = tf.keras.datasets.mnist
 elif sys.argv[1] == 'fmnist':
     keras_data = tf.keras.datasets.fashion_mnist
+# keras_data = tf.keras.datasets.mnist
 training_set, training_labels, test_set, test_labels, classes, training_set_idx = create_mnist_set(data_type=keras_data,
                                                                                                    nDigit=n_shape,
                                                                                                    nSample=n_samples,
@@ -632,6 +644,7 @@ testing_set = test_set[::test_iter_idx]
 gpus = tf.config.experimental.list_logical_devices('GPU')
 
 gpu_i = int(sys.argv[2])
+# gpu_i = 0
 
 with tf.device(gpus[gpu_i].name):
 
@@ -667,7 +680,7 @@ with tf.device(gpus[gpu_i].name):
                                 lr=lrate, reg_a=reg_alpha,
                                 input_current=training_set.T,
                                 n_class=n_shape, batch_size=batch_size,
-                                    set_idx=rep_set_idx, report_idx=report_index)
+                                set_idx=rep_set_idx, report_idx=report_index)
 
     # save simulation data
     save_data(save_folder)

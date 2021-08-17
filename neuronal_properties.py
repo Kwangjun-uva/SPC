@@ -110,7 +110,7 @@ def k_sparseness(fs_np, img_id):
 
     return fig1, fig2
 
-# fs_np = np.load('sparseness/fs.npy')
+fs_np = np.load('sparseness/fs.npy')
 # fr_plot, k_sparse_plot = k_sparseness(fs_np, img_id=1)
 # plt.show()
 

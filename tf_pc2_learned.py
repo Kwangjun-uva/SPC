@@ -594,40 +594,43 @@ test_iter_idx = int(n_samples/test_n_sample)
 
 testing_set = test_set[::test_iter_idx]
 
-gpus = tf.config.experimental.list_logical_devices('GPU')
 
-gpu_i = 0
 
-with tf.device(gpus[gpu_i].name):
+# create a folder to save results
+save_folder = 'sparseness'
+if os.path.exists(save_folder):
+    save_folder += datetime.today().strftime('_%Y_%m_%d_%H_%M')
+os.mkdir(save_folder)
 
-    # create a folder to save results
-    save_folder = 'sparseness'
-    if os.path.exists(save_folder):
-        save_folder += datetime.today().strftime('_%Y_%m_%d_%H_%M')
-    os.mkdir(save_folder)
+# plot the same test set
+plot_mnist_set(testset=training_set, testset_idx=training_set_idx,
+               nDigit=n_shape, nSample=n_samples,
+               savefolder=save_folder)
 
-    # print how many GPUs
-    update_sim_time(save_folder, "Num GPUs Available: {0}\n".format(tf.config.list_physical_devices('GPU')))
+# build network
+adex_01 = AdEx_Layer(sim_directory=save_folder,
+                     neuron_model_constants=AdEx,
+                     num_pc_layers=n_pc_layers,
+                     num_pred_neurons=n_pred_neurons,
+                     num_stim=n_stim,
+                     gist_num=n_gist, w_mat=w_mat)
 
-    # plot the same test set
-    plot_mnist_set(testset=training_set, testset_idx=training_set_idx,
-                   nDigit=n_shape, nSample=n_samples,
-                   savefolder=save_folder)
+# weight dist change
+w_fig = weight_dist(savefolder=save_folder,
+                    weights=adex_01.w, weights_init=adex_01.w_init,
+                    n_pc=adex_01.n_pc_layer)
 
-    # build network
-    adex_01 = AdEx_Layer(sim_directory=save_folder,
-                         neuron_model_constants=AdEx,
-                         num_pc_layers=n_pc_layers,
-                         num_pred_neurons=n_pred_neurons,
-                         num_stim=n_stim,
-                         gist_num=n_gist, w_mat=w_mat)
+test_fig = adex_01.test_inference(imgs=testing_set,
+                                  nsample=test_n_sample, ndigit=test_n_shape,
+                                  simul_dur=sim_dur, sim_dt=dt, sim_lt=learning_window,
+                                  train_or_test='test')
 
-    # weight dist change
-    w_fig = weight_dist(savefolder=save_folder,
-                        weights=adex_01.w, weights_init=adex_01.w_init,
-                        n_pc=adex_01.n_pc_layer)
-
-    test_fig = adex_01.test_inference(imgs=testing_set,
-                                      nsample=test_n_sample, ndigit=test_n_shape,
-                                      simul_dur=sim_dur, sim_dt=dt, sim_lt=learning_window,
-                                      train_or_test='test')
+np.savez(save_folder + '/training_dict',
+         digits=classes,
+         training_set_idx=training_set_idx,
+         training_labels=training_labels,
+         rep_set_idx=rep_set_idx)
+np.savez(save_folder + '/test_dict',
+         digits=classes,
+         test_set_idx=training_set_idx,
+         training_labels=test_labels)
