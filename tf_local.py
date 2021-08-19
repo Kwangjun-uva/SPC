@@ -131,6 +131,7 @@ class AdEx_Layer(object):
 
         # feed external corrent to the first layer
         self.Iext = tf.constant(I_ext, dtype=tf.float32)
+        self.fs = tf.Variable(tf.zeros([self.n_variable, self.batch_size], dtype=tf.float32))
 
         for t in range(int(self.T / self.dt)):
             # update internal variables (v, c, x, x_tr)
@@ -211,11 +212,13 @@ class AdEx_Layer(object):
         curr_p_idx = sum(self.neurons_per_group[:pc_layer_idx * 3])
         curr_p_size = self.neurons_per_group[pc_layer_idx * 3]
 
-        # index of
+        # index of next prediction layer
         next_p_idx = sum(self.neurons_per_group[:pc_layer_idx * 3 + 3])
         next_p_size = self.neurons_per_group[pc_layer_idx * 3 + 3]
 
+        # input / predictin error
         bu_sensory = self.x_tr[curr_p_idx: curr_p_idx + curr_p_size, :] * self.w_const
+        # prediction
         td_pred = self.w['pc' + str(pc_layer_idx + 1)] @ (
                 self.x_tr[next_p_idx:next_p_idx + next_p_size, :] * self.w_const)
 
@@ -336,7 +339,6 @@ class AdEx_Layer(object):
                       num_epoch, simul_dur, sim_dt, sim_lt,
                       lr, reg_a,
                       input_current,
-                      test_set, test_n_sample,
                       n_class, batch_size,
                       set_idx,
                       report_idx):
@@ -387,7 +389,7 @@ class AdEx_Layer(object):
                                                                                                         sqrt_nstim,
                                                                                                         len(set_id)) / pamp
 
-                fig, axs = plt.subplots(ncols=self.n_pc_layer + 1, nrows=n_class, figsize=(4 * 5, 4 * n_class))
+                fig, axs = plt.subplots(ncols=3, nrows=n_class, figsize=(4 * 3, 4 * n_class))
                 for plt_idx in range(len(set_id)):
                     input_plot = axs[plt_idx, 0].imshow(input_img[:, :, plt_idx], cmap='Reds', vmin=600, vmax=4000)
                     fig.colorbar(input_plot, ax=axs[plt_idx, 0], shrink=0.6)
@@ -416,7 +418,7 @@ class AdEx_Layer(object):
             #     self.w['pc1'] @ self.xtr_record[n_stim * 3:n_stim * 3 + self.n_pred[0], :],
             #     (sqrt_nstim, sqrt_nstim, self.batch_size)) / pamp
 
-            sse_fig, sse_axs = plt.subplots(nrows=3, ncols=1, sharex=True)
+            sse_fig, sse_axs = plt.subplots(nrows=self.n_pc_layer, ncols=1, sharex=True)
             for i in range(1, self.n_pc_layer + 1):
                 bu_start_idx = sum(self.neurons_per_group[:3 * (i - 1)])
                 bu_end_idx = bu_start_idx + self.neurons_per_group[3*(i-1)]
@@ -435,22 +437,6 @@ class AdEx_Layer(object):
             sse_fig.suptitle('SSE update: epoch #{0}/{1}'.format(epoch_i + 1, num_epoch))
             sse_fig.savefig(self.model_dir + '/log_sse.png'.format(epoch_i + 1))
             plt.close(sse_fig)
-
-            if (epoch_i+1) % 10 == 0:
-                # weight dist change
-                w_fig = weight_dist(savefolder=save_folder,
-                                    weights=self.w, weights_init=self.w_init,
-                                    n_pc=self.n_pc_layer)
-
-                test_fig = self.test_inference(imgs=test_set,
-                                                  nsample=test_n_sample, ndigit=n_class,
-                                                  simul_dur=simul_dur, sim_dt=sim_dt, sim_lt=sim_lt,
-                                                  train_or_test='test')
-
-                # rdm analysis
-                rdm_fig = rdm_plots(model=adex_01,
-                                    testing_current=test_set, n_class=n_class,
-                                    savefolder=save_folder, trained="test")
 
         end_time = time.time()
         update_sim_time(self.model_dir, '\nsimulation : {0}'.format(str(timedelta(seconds=end_time - start_time))))
@@ -620,31 +606,26 @@ with open('adex_constants.pickle', 'rb') as f:
 pamp = 10 ** -12
 
 # network parameters
-n_pred_neurons = [900, 1296, 1024] # preferably each entry is an integer that has an integer square root
+n_pred_neurons = [900, 1296, 1156, 1024] # preferably each entry is an integer that has an integer square root
 n_pc_layers = len(n_pred_neurons)
 n_gist = 128
 
 # create external input
-batch_size = 256
+batch_size = 128
 n_shape = 3
-n_samples = 1024
+n_samples = 512
 
 # simulate
 sim_dur = 500 * 10 ** (-3)  # ms
 dt = 1 * 10 ** (-4)  # ms
 learning_window = 200 * 10 ** -3
-report_index = 10
+report_index = 1
 
-n_epoch = 300
-lrate = np.repeat(5.0, n_pc_layers) * 10 ** - 8
-reg_alpha = np.repeat(1.0, n_pc_layers) * 10 ** -4
+n_epoch = 3
+lrate = np.array([1.0, 1.0, 1.0, 1.0]) * 10 ** - 7
+reg_alpha = np.array([1.0, 1.0, 1.0, 1.0]) * 10 ** -4
 
-# training_set, training_labels, test_set, test_labels, digits, training_set_idx
-if sys.argv[1] == 'mnist':
-    keras_data = tf.keras.datasets.mnist
-elif sys.argv[1] == 'fmnist':
-    keras_data = tf.keras.datasets.fashion_mnist
-# keras_data = tf.keras.datasets.mnist
+keras_data = tf.keras.datasets.mnist
 training_set, training_labels, test_set, test_labels, classes, training_set_idx = create_mnist_set(data_type=keras_data,
                                                                                                    nDigit=n_shape,
                                                                                                    nSample=n_samples,
@@ -667,63 +648,47 @@ test_iter_idx = int(n_samples/test_n_sample)
 
 testing_set = test_set[::test_iter_idx]
 
-gpus = tf.config.experimental.list_logical_devices('GPU')
+# create a folder to save results
+save_folder = datetime.today().strftime('%Y_%m_%d_%H_%M') + '_nD' + str(n_shape) + 'nS' + str(n_samples) + 'nEP' + str(n_epoch)
+os.mkdir(save_folder)
 
-gpu_i = int(sys.argv[2])
-# gpu_i = 0
+# plot the same test set
+plot_mnist_set(testset=training_set, testset_idx=training_set_idx,
+               nDigit=n_shape, nSample=n_samples,
+               savefolder=save_folder)
 
-with tf.device(gpus[gpu_i].name):
-
-    # create a folder to save results
-    save_folder = 'gpu' + str(gpu_i+1) + '_nD' + str(n_shape) + 'nS' + str(n_samples) + 'nEP' + str(n_epoch)
-    if os.path.exists(save_folder):
-        save_folder += datetime.today().strftime('_%Y_%m_%d_%H_%M')
-    os.mkdir(save_folder)
-
-    # print how many GPUs
-    update_sim_time(save_folder, "Num GPUs Available: {0}\n".format(tf.config.list_physical_devices('GPU')))
-
-    # identify current GPU
-    update_sim_time(save_folder, "currently running on " + gpus[gpu_i].name + '\n')
-
-    # plot the same test set
-    plot_mnist_set(testset=training_set, testset_idx=training_set_idx,
-                   nDigit=n_shape, nSample=n_samples,
-                   savefolder=save_folder)
-
-    # build network
-    adex_01 = AdEx_Layer(sim_directory=save_folder,
-                         neuron_model_constants=AdEx,
-                         num_pc_layers=n_pc_layers,
-                         num_pred_neurons=n_pred_neurons,
-                         num_stim=n_stim,
-                         gist_num=n_gist, gist_connp=conn_vals, gist_maxw=max_vals)
+# build network
+adex_01 = AdEx_Layer(sim_directory=save_folder,
+                     neuron_model_constants=AdEx,
+                     num_pc_layers=n_pc_layers,
+                     num_pred_neurons=n_pred_neurons,
+                     num_stim=n_stim,
+                     gist_num=n_gist, gist_connp=conn_vals, gist_maxw=max_vals)
 
 
-    # train_network(self, num_epoch, sim_dur, sim_dt, sim_lt, lr, reg_a, input_current, n_shape, n_batch, set_idx):
-    sse = adex_01.train_network(num_epoch=n_epoch,
-                                simul_dur=sim_dur, sim_dt=dt, sim_lt=learning_window,
-                                lr=lrate, reg_a=reg_alpha,
-                                input_current=training_set.T,
-                                test_set=testing_set, test_n_sample=test_n_sample,
-                                n_class=n_shape, batch_size=batch_size,
-                                set_idx=rep_set_idx, report_idx=report_index)
+# train_network(self, num_epoch, sim_dur, sim_dt, sim_lt, lr, reg_a, input_current, n_shape, n_batch, set_idx):
+sse = adex_01.train_network(num_epoch=n_epoch,
+                            simul_dur=sim_dur, sim_dt=dt, sim_lt=learning_window,
+                            lr=lrate, reg_a=reg_alpha,
+                            input_current=training_set.T,
+                            n_class=n_shape, batch_size=batch_size,
+                            set_idx=rep_set_idx, report_idx=report_index)
 
-    # save simulation data
-    save_data(save_folder)
+# save simulation data
+save_data(save_folder)
 
-    # # weight dist change
-    # w_fig = weight_dist(savefolder=save_folder,
-    #                     weights=adex_01.w, weights_init=adex_01.w_init,
-    #                     n_pc=adex_01.n_pc_layer)
-    #
-    # test_fig = adex_01.test_inference(imgs=testing_set,
-    #                                   nsample=test_n_sample, ndigit=test_n_shape,
-    #                                   simul_dur=sim_dur, sim_dt=dt, sim_lt=learning_window,
-    #                                   train_or_test='test')
-    #
-    #
-    # # rdm analysis
-    # rdm_fig = rdm_plots(model=adex_01,
-    #                     testing_current=testing_set, n_class=test_n_shape,
-    #                     savefolder=save_folder, trained="test")
+# weight dist change
+w_fig = weight_dist(savefolder=save_folder,
+                    weights=adex_01.w, weights_init=adex_01.w_init,
+                    n_pc=adex_01.n_pc_layer)
+
+test_fig = adex_01.test_inference(imgs=testing_set,
+                                  nsample=test_n_sample, ndigit=test_n_shape,
+                                  simul_dur=sim_dur, sim_dt=dt, sim_lt=learning_window,
+                                  train_or_test='test')
+
+
+# rdm analysis
+rdm_fig = rdm_plots(model=adex_01,
+                    testing_current=testing_set, n_class=test_n_shape,
+                    savefolder=save_folder, trained="test")
