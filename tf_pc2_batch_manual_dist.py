@@ -387,7 +387,7 @@ class AdEx_Layer(object):
                                                                                                         sqrt_nstim,
                                                                                                         len(set_id)) / pamp
 
-                fig, axs = plt.subplots(ncols=self.n_pc_layer + 1, nrows=n_class, figsize=(4 * 5, 4 * n_class))
+                fig, axs = plt.subplots(ncols=3, nrows=n_class, figsize=(4 * 5, 4 * n_class))
                 for plt_idx in range(len(set_id)):
                     input_plot = axs[plt_idx, 0].imshow(input_img[:, :, plt_idx], cmap='Reds', vmin=600, vmax=4000)
                     fig.colorbar(input_plot, ax=axs[plt_idx, 0], shrink=0.6)
@@ -407,16 +407,9 @@ class AdEx_Layer(object):
             epoch_time_avg += time.time() - epoch_time
             update_sim_time(self.model_dir, '\n***** time remaining = {0}'.format(
                 str(timedelta(seconds=epoch_time_avg / (epoch_i + 1) * (num_epoch - epoch_i - 1)))))
-            # print('***** time remaining = {0}'.format(
-            #     str(timedelta(seconds=epoch_time_avg / (epoch_i + 1) * (num_epoch - epoch_i - 1)))))
 
-            # calculate sse
-            # l0_input = tf.reshape(self.xtr_record[:n_stim, :], (sqrt_nstim, sqrt_nstim, self.batch_size)) / pamp
-            # l1_pred = tf.reshape(
-            #     self.w['pc1'] @ self.xtr_record[n_stim * 3:n_stim * 3 + self.n_pred[0], :],
-            #     (sqrt_nstim, sqrt_nstim, self.batch_size)) / pamp
-
-            sse_fig, sse_axs = plt.subplots(nrows=3, ncols=1, sharex=True)
+            # sse
+            sse_fig, sse_axs = plt.subplots(nrows=self.n_pc_layer, ncols=1, sharex=True)
             for i in range(1, self.n_pc_layer + 1):
                 bu_start_idx = sum(self.neurons_per_group[:3 * (i - 1)])
                 bu_end_idx = bu_start_idx + self.neurons_per_group[3*(i-1)]
@@ -434,7 +427,9 @@ class AdEx_Layer(object):
 
             sse_fig.suptitle('SSE update: epoch #{0}/{1}'.format(epoch_i + 1, num_epoch))
             sse_fig.savefig(self.model_dir + '/log_sse.png'.format(epoch_i + 1))
-            plt.close(self.sse_fig)
+            plt.close(sse_fig)
+
+            save_results(self.model_dir)
 
             if (epoch_i+1) % n_plot_idx == 0:
                 # weight dist change
@@ -528,7 +523,7 @@ def save_data(sim_name):
 
     # save simulation params
     sim_params = {'n_pc_layers': n_pc_layers, 'n_pred_neurons': n_pred_neurons, 'n_gist': n_gist,
-                  'batch_size': batch_size, 'n_sample': n_samples, 'n_shape': n_shape, 'sim_dur': sim_dur, 'dt': dt,
+                  'batch_size': batch_size, 'n_samples': n_samples, 'n_shape': n_shape, 'sim_dur': sim_dur, 'dt': dt,
                   'learning_window': learning_window, 'n_epoch': n_epoch, 'lrate': lrate, 'reg_alpha': reg_alpha,
                   'report_index': report_index, 'n_plot_idx': n_plot_idx}
     with open(sim_name + '/sim_params_dict.pickle', 'wb') as handle2:
@@ -660,6 +655,7 @@ sqrt_nstim = int(np.sqrt(n_stim))
 
 rep_set_idx = pick_idx(training_labels, classes, batch_size)
 n_plot_idx = 10
+# n_plot_idx = 1
 
 conn_vals = np.array([conn_probs(a_i, b_i)
                               for a_i, b_i in zip([n_stim] + [n_gist] * n_pc_layers, [n_gist] + n_pred_neurons)]) * 0.05

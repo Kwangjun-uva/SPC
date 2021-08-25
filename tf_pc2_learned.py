@@ -162,7 +162,7 @@ class AdEx_Layer(object):
 
         # update spike monitor (fired: dtype=bool): if fired = True, else = False
         self.fired = tf.cast(tf.greater_equal(self.v, self.VT), tf.float32)
-        self.fs.assign_add(self.fired)
+        # self.fs.assign_add(self.fired)
 
         # reset variables
         self.v = self.fired * self.EL + (1 - self.fired) * self.v
@@ -351,9 +351,9 @@ class AdEx_Layer(object):
         # load sse from previous training
         with open(self.model_dir + '/sse_dict.pickle', 'rb') as sse_handle:
             sse_original = pickle.load(sse_handle)
-        sse = {}
+        self.sse = {}
         for key, sse_pci in sse_original.items():
-            sse[key] = sse_pci
+            self.sse[key] = sse_pci
 
         # # create a sse dictionary for pc layers
         # for i in range(1, self.n_pc_layer + 1):
@@ -398,7 +398,7 @@ class AdEx_Layer(object):
                                                                                                         sqrt_nstim,
                                                                                                         len(set_id)) / pamp
 
-                fig, axs = plt.subplots(ncols=self.n_pc_layer + 1, nrows=n_class, figsize=(4 * 5, 4 * n_class))
+                fig, axs = plt.subplots(ncols=3, nrows=n_class, figsize=(4 * 5, 4 * n_class))
                 for plt_idx in range(len(set_id)):
                     input_plot = axs[plt_idx, 0].imshow(input_img[:, :, plt_idx], cmap='Reds', vmin=600, vmax=4000)
                     fig.colorbar(input_plot, ax=axs[plt_idx, 0], shrink=0.6)
@@ -420,7 +420,7 @@ class AdEx_Layer(object):
             update_sim_time(self.model_dir, '\n***** time remaining = {0}'.format(
                 str(timedelta(seconds=epoch_time_avg / (epoch_i + 1) * (num_epoch - epoch_i - 1)))))
 
-            sse_fig, sse_axs = plt.subplots(nrows=3, ncols=1, sharex=True)
+            sse_fig, sse_axs = plt.subplots(nrows=self.n_pc_layer, ncols=1, sharex=True)
             for i in range(1, self.n_pc_layer + 1):
                 bu_start_idx = sum(self.neurons_per_group[:3 * (i - 1)])
                 bu_end_idx = bu_start_idx + self.neurons_per_group[3*(i-1)]
@@ -430,8 +430,8 @@ class AdEx_Layer(object):
                 bu_input = self.xtr_record[bu_start_idx:bu_end_idx] / pamp
                 td_pred = (self.w['pc' + str(i)] @ self.xtr_record[td_start_idx:td_end_idx]) / pamp
 
-                sse['pc' + str(i)].append(tf.reduce_sum(tf.reduce_mean((td_pred - bu_input) ** 2, axis=1)).numpy())
-                sse_axs[i - 1].plot(np.arange(epoch_i + 1 + prg_start_idx), np.log(sse['pc' + str(i)]))
+                self.sse['pc' + str(i)].append(tf.reduce_sum(tf.reduce_mean((td_pred - bu_input) ** 2, axis=1)).numpy())
+                sse_axs[i - 1].plot(np.arange(epoch_i + 1 + prg_start_idx), np.log(self.sse['pc' + str(i)]))
                 sse_axs[i - 1].set_xlabel('epoch #')
                 sse_axs[i - 1].set_ylabel('log (SSE)')
                 sse_axs[i - 1].label_outer()
@@ -445,7 +445,7 @@ class AdEx_Layer(object):
                 # weight dist change
                 w_fig = weight_dist(savefolder=save_folder,
                                     weights=self.w, weights_init=self.w_init,
-                                    n_pc=self.n_pc_layer)
+                                    n_pc=self.n_pc_layer, epoch_i=epoch_i)
 
                 test_fig = self.test_inference(imgs=test_set,
                                                   nsample=test_n_sample, ndigit=n_class,
@@ -455,12 +455,14 @@ class AdEx_Layer(object):
                 # rdm analysis
                 rdm_fig = rdm_plots(model=adex_01,
                                     testing_current=test_set, n_class=n_class,
-                                    savefolder=save_folder, trained="test")
+                                    savefolder=self.model_dir, trained="test", epoch_i=epoch_i)
+
+            save_results(self.model_dir)
 
         end_time = time.time()
         update_sim_time(self.model_dir, '\nsimulation : {0}'.format(str(timedelta(seconds=end_time - start_time))))
 
-        return sse
+        return self.sse
 
 
 def pick_idx(idx_set, digits, size_batch):
@@ -481,32 +483,46 @@ def pick_idx(idx_set, digits, size_batch):
 def conn_probs(n_a, n_b):
     return np.sqrt(n_b / n_a) * 0.025
 
-def save_data(sim_name):
-
-    # gather new learned weights
+def save_results(sim_name):
+    # save weights
     save_ws = {}
     for key, ws in adex_01.w.items():
         save_ws[key] = ws.numpy()
-    # replace learned weight dictionary
     with open(sim_name + '/weight_dict.pickle', 'wb') as w_handle:
         pickle.dump(save_ws, w_handle, protocol=pickle.HIGHEST_PROTOCOL)
+    # save initial weights
+    save_ws_init = {}
+    for key, ws in adex_01.w_init.items():
+        save_ws_init[key] = ws.numpy()
+    with open(sim_name + '/weight_init_dict.pickle', 'wb') as w_init_handle:
+        pickle.dump(save_ws_init, w_init_handle, protocol=pickle.HIGHEST_PROTOCOL)
+    # save sse
+    with open(sim_name + '/sse_dict.pickle', 'wb') as sse_handle:
+        pickle.dump(adex_01.sse, sse_handle, protocol=pickle.HIGHEST_PROTOCOL)
 
-    # # update SSE by appending
-    # with open(sim_name + '/sse_dict.pickle', 'rb') as sse_handle:
-    #     sse_original = pickle.load(sse_handle)
-    # for key, sse_pci in sse_original.items():
-    #     sse_original[key] = sse_pci + sse[key]
-    # save
-    with open(sim_name + '/sse_dict.pickle', 'wb') as sse_handle2:
-        pickle.dump(sse, sse_handle2, protocol=pickle.HIGHEST_PROTOCOL)
+def save_data(sim_name):
+    # save training data
+    np.save(sim_name + '/training_data', training_set)
+    np.save(sim_name + '/test_data', test_set)
 
-    # update epoch length
-    with open(sim_name + '/sim_params_dict.pickle', 'rb') as params_handle:
-        params_original = pickle.load(params_handle)
-    params_original['n_epoch'] += n_epoch
-    # save
+    np.savez(sim_name + '/training_dict',
+             digits=classes,
+             training_set_idx=training_set_idx,
+             training_labels=training_labels,
+             test_set_labels=test_labels,
+             rep_set_idx=rep_set_idx)
+    # np.savez(sim_name + '/test_dict',
+    #          digits=classes,
+    #          test_set_idx=training_set_idx,
+    #          training_labels=test_labels)
+
+    # save simulation params
+    sim_params = {'n_pc_layers': n_pc_layers, 'n_pred_neurons': n_pred_neurons, 'n_gist': n_gist,
+                  'batch_size': batch_size, 'n_samples': n_samples, 'n_shape': n_shape, 'sim_dur': sim_dur, 'dt': dt,
+                  'learning_window': learning_window, 'n_epoch': n_epoch, 'lrate': lrate, 'reg_alpha': reg_alpha,
+                  'report_index': report_index, 'n_plot_idx': n_plot_idx}
     with open(sim_name + '/sim_params_dict.pickle', 'wb') as handle2:
-        pickle.dump(params_original, handle2, protocol=pickle.HIGHEST_PROTOCOL)
+        pickle.dump(sim_params, handle2, protocol=pickle.HIGHEST_PROTOCOL)
 
 def matrix_rdm(matrix_data):
     output = np.array([1 - spearmanr(matrix_data[ni], matrix_data[mi])[0]
@@ -516,7 +532,7 @@ def matrix_rdm(matrix_data):
     return output
 
 
-def rdm_plots(model, testing_current, n_class, savefolder, trained):
+def rdm_plots(model, testing_current, n_class, savefolder, trained, epoch_i=None):
     inp_size, sample_size = testing_current.T.shape
 
     # RDM for input
@@ -549,12 +565,12 @@ def rdm_plots(model, testing_current, n_class, savefolder, trained):
 
     rdm1_filename = 'rdm1_dict'
     rdm2_filename = 'rdm2_dict'
-    if os.path.isfile(savefolder + '/' + rdm1_filename + '.pickle'):
-        rdm1_filename += datetime.today().strftime('_%Y_%m_%d_%H_%M')
+    # if os.path.isfile(savefolder + '/' + rdm1_filename + '.pickle'):
+    #     rdm1_filename += datetime.today().strftime('_%Y_%m_%d_%H_%M')
     with open(savefolder + '/' + rdm1_filename + '.pickle', 'wb') as handle:
         pickle.dump(rdms, handle, protocol=pickle.HIGHEST_PROTOCOL)
-    if os.path.isfile(savefolder + '/' + rdm2_filename + '.pickle'):
-        rdm2_filename += datetime.today().strftime('_%Y_%m_%d_%H_%M')
+    # if os.path.isfile(savefolder + '/' + rdm2_filename + '.pickle'):
+    #     rdm2_filename += datetime.today().strftime('_%Y_%m_%d_%H_%M')
     with open(savefolder + '/' + rdm2_filename + '.pickle', 'wb') as handle:
         pickle.dump(rdms, handle, protocol=pickle.HIGHEST_PROTOCOL)
 
@@ -587,10 +603,11 @@ def rdm_plots(model, testing_current, n_class, savefolder, trained):
     r2_t.set_xticklabels([pc_i for pc_i in rdms.keys() if 'P' in pc_i])
     r2_t.set_ylim([0, 1])
 
-    rdm_fig_name = 'rdms_plot_' + trained
-    if os.path.isfile(savefolder + '/' + rdm_fig_name + '.pickle'):
-        rdm_fig_name += datetime.today().strftime('_%Y_%m_%d_%H_%M')
-    fig.savefig(savefolder + '/' + rdm_fig_name + '.png')
+    save_filename = '{}/rdms_plot_{}.png'.format(savefolder, trained)
+    if epoch_i is not None:
+        save_filename = '{}/rdms_plot_{}_{:03d}.png'.format(savefolder, trained, epoch_i + 1)
+
+    fig.savefig(save_filename)
 
     return fig
 
@@ -642,7 +659,7 @@ max_vals = np.array([1] * (n_pc_layers + 1)) * 0.25 * 5
 # test inference on test data
 test_n_shape = n_shape
 test_n_sample = 16
-test_iter_idx = int(n_samples/test_n_sample)
+test_iter_idx = int(n_sample/test_n_sample)
 
 testing_set = test_set[::test_iter_idx]
 
@@ -675,8 +692,8 @@ with tf.device(gpus[gpu_i].name):
                                 n_class=n_shape, batch_size=batch_size,
                                 set_idx=rep_set_idx, report_idx=report_index, n_plot_idx=n_plot_idx)
 
-    # save simulation data
-    save_data(save_folder)
+    # # save simulation data
+    # save_data(save_folder)
 
 
 # # weight dist change : !!!! need to fix the initial weights. needs to be loaded from a separate init weight dict !!!!
