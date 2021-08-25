@@ -129,7 +129,7 @@ class AdEx_Layer(object):
         # feed external corrent to the first layer
         self.Iext = tf.constant(I_ext, dtype=tf.float32)
 
-        self.fs = tf.Variable(tf.zeros([self.n_variable, self.batch_size], dtype=tf.float32))
+        # self.fs = tf.Variable(tf.zeros([self.n_variable, self.batch_size], dtype=tf.float32))
 
         for t in range(int(self.T / self.dt)):
             # update internal variables (v, c, x, x_tr)
@@ -336,9 +336,10 @@ class AdEx_Layer(object):
                       num_epoch, simul_dur, sim_dt, sim_lt,
                       lr, reg_a,
                       input_current,
+                      test_set, test_n_sample,
                       n_class, batch_size,
                       set_idx,
-                      report_idx):
+                      report_idx, n_plot_idx):
 
         # starting idx for progress update
         prg_start_idx = latest_epoch(save_folder)
@@ -437,8 +438,24 @@ class AdEx_Layer(object):
 
             sse_fig.suptitle('SSE update: epoch #{0}/{1}'.format(epoch_i + 1 + prg_start_idx,
                                                                  num_epoch + prg_start_idx))
-            sse_fig.savefig(self.model_dir + '/log_sse.png'.format(epoch_i + 1 + prg_start_idx))
+            sse_fig.savefig(self.model_dir + '/log_sse.png')#.format(epoch_i + 1 + prg_start_idx))
             plt.close(sse_fig)
+
+            if (epoch_i+1) % n_plot_idx == 0:
+                # weight dist change
+                w_fig = weight_dist(savefolder=save_folder,
+                                    weights=self.w, weights_init=self.w_init,
+                                    n_pc=self.n_pc_layer)
+
+                test_fig = self.test_inference(imgs=test_set,
+                                                  nsample=test_n_sample, ndigit=n_class,
+                                                  simul_dur=simul_dur, sim_dt=sim_dt, sim_lt=sim_lt,
+                                                  train_or_test='test')
+
+                # rdm analysis
+                rdm_fig = rdm_plots(model=adex_01,
+                                    testing_current=test_set, n_class=n_class,
+                                    savefolder=save_folder, trained="test")
 
         end_time = time.time()
         update_sim_time(self.model_dir, '\nsimulation : {0}'.format(str(timedelta(seconds=end_time - start_time))))
@@ -583,7 +600,7 @@ with open('adex_constants.pickle', 'rb') as f:
     AdEx = pickle.load(f)
 
 # specify the folder
-save_folder = 'gpu1_nD3nS1024nEP150'
+save_folder = sys.argv[1]
 
 # load training dictionary
 training_dict = {}
@@ -608,7 +625,7 @@ for key, grp in w_mat.items():
 pamp = 10 ** -12
 
 # not necessary from next training
-n_epoch = 1
+n_epoch = int(sys.argv[2])
 
 # training_set, training_labels, test_set, test_labels, digits, training_set_idx
 training_set = np.load(save_folder + '/training_data.npy')
@@ -635,42 +652,49 @@ testing_set = test_set[::test_iter_idx]
 #     save_folder += datetime.today().strftime('_%Y_%m_%d_%H_%M')
 # os.mkdir(save_folder)
 
-# build network
-adex_01 = AdEx_Layer(sim_directory=save_folder,
-                     neuron_model_constants=AdEx,
-                     num_pc_layers=n_pc_layers,
-                     num_pred_neurons=n_pred_neurons,
-                     num_stim=n_stim,
-                     gist_num=n_gist, w_mat=w_mat)
+gpus = tf.config.experimental.list_logical_devices('GPU')
+gpu_i = int(sys.argv[3])
+# gpu_i = 0
 
-# train_network(self, num_epoch, sim_dur, sim_dt, sim_lt, lr, reg_a, input_current, n_shape, n_batch, set_idx):
-sse = adex_01.train_network(num_epoch=n_epoch,
-                            simul_dur=sim_dur, sim_dt=dt, sim_lt=learning_window,
-                            lr=lrate, reg_a=reg_alpha,
-                            input_current=training_set.T,
-                            n_class=n_shape, batch_size=batch_size,
-                            set_idx=rep_set_idx, report_idx=report_index)
+with tf.device(gpus[gpu_i].name):
 
-# save simulation data
-save_data(save_folder)
+    # build network
+    adex_01 = AdEx_Layer(sim_directory=save_folder,
+                         neuron_model_constants=AdEx,
+                         num_pc_layers=n_pc_layers,
+                         num_pred_neurons=n_pred_neurons,
+                         num_stim=n_stim,
+                         gist_num=n_gist, w_mat=w_mat)
+
+    # train_network(self, num_epoch, sim_dur, sim_dt, sim_lt, lr, reg_a, input_current, n_shape, n_batch, set_idx):
+    sse = adex_01.train_network(num_epoch=n_epoch,
+                                simul_dur=sim_dur, sim_dt=dt, sim_lt=learning_window,
+                                lr=lrate, reg_a=reg_alpha,
+                                input_current=training_set.T,
+                                test_set=testing_set, test_n_sample=test_n_sample,
+                                n_class=n_shape, batch_size=batch_size,
+                                set_idx=rep_set_idx, report_idx=report_index, n_plot_idx=n_plot_idx)
+
+    # save simulation data
+    save_data(save_folder)
 
 
-# weight dist change : !!!! need to fix the initial weights. needs to be loaded from a separate init weight dict !!!!
-with open(save_folder + '/weight_init_dict.pickle', 'rb') as wdict_init:
-    w_init_mat = pickle.load(wdict_init)
-# convert them to tensors
-for key, grp in w_init_mat.items():
-    w_init_mat[key] = tf.convert_to_tensor(grp)
+# # weight dist change : !!!! need to fix the initial weights. needs to be loaded from a separate init weight dict !!!!
+# with open(save_folder + '/weight_init_dict.pickle', 'rb') as wdict_init:
+#     w_init_mat = pickle.load(wdict_init)
+# # convert them to tensors
+# for key, grp in w_init_mat.items():
+#     w_init_mat[key] = tf.convert_to_tensor(grp)
 
-w_fig = weight_dist(savefolder=save_folder,
-                    weights=adex_01.w, weights_init=w_init_mat,
-                    n_pc=adex_01.n_pc_layer)
-
-test_fig = adex_01.test_inference(imgs=testing_set,
-                                  nsample=test_n_sample, ndigit=test_n_shape,
-                                  simul_dur=sim_dur, sim_dt=dt, sim_lt=learning_window,
-                                  train_or_test='test')
-# rdm analysis
-rdm_fig = rdm_plots(model=adex_01,
-                    testing_current=testing_set, n_class=test_n_shape,
-                    savefolder=save_folder, trained="test")
+# w_fig = weight_dist(savefolder=save_folder,
+#                     weights=adex_01.w, weights_init=w_init_mat,
+#                     n_pc=adex_01.n_pc_layer)
+#
+# test_fig = adex_01.test_inference(imgs=testing_set,
+#                                   nsample=test_n_sample, ndigit=test_n_shape,
+#                                   simul_dur=sim_dur, sim_dt=dt, sim_lt=learning_window,
+#                                   train_or_test='test')
+# # rdm analysis
+# rdm_fig = rdm_plots(model=adex_01,
+#                     testing_current=testing_set, n_class=test_n_shape,
+#                     savefolder=save_folder, trained="test")
