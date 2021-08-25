@@ -1,5 +1,7 @@
 import numpy as np
 import matplotlib.pyplot as plt
+import os.path
+from datetime import datetime
 
 import create_33images
 
@@ -31,7 +33,7 @@ def error_raster(fr_array, n_stim, sample_neuron_idx):
 
     return (ep_fr + en_fr > 1).any(), fig
 
-def weight_dist(savefolder, weights, weights_init, n_pc):
+def weight_dist(savefolder, weights, weights_init, n_pc, epoch_i):
 
     fig, axs = plt.subplots(nrows=2, ncols=n_pc, figsize=(4 * n_pc, 5))
     for plt_idx, (key, grp) in enumerate(weights.items()):
@@ -52,6 +54,26 @@ def weight_dist(savefolder, weights, weights_init, n_pc):
             pass
 
     fig.tight_layout()
-    fig.savefig(savefolder + '/weight_dist_change.png')
+    savefile_name = 'weight_dist_change_{:03d}'.format(epoch_i+1)
+    # if os.path.isfile(savefolder + '/' + savefile_name + '.png'):
+        # savefile_name += datetime.today().strftime('_%Y_%m_%d_%H_%M')
+    fig.savefig(savefolder + '/' + savefile_name + '.png')
 
     return fig
+
+# int_size = [28] + np.sqrt(adex_01.n_pred[:-1]).astype(int).tolist()
+#
+# p_reps = {}
+# for pc_i in range(1, 5):
+#     source_p_size = adex_01.n_pred[pc_i - 1]
+#
+#     curr_p_start_idx = sum(adex_01.neurons_per_group[:3 * pc_i])
+#     curr_p_end_idx = sum(adex_01.neurons_per_group[:3 * pc_i]) + source_p_size
+#
+#     p_reps['pc' + str(pc_i)] = (adex_01.w['pc' + str(pc_i)] @ adex_01.xtr_record[curr_p_start_idx:curr_p_end_idx, :]).numpy().reshape(int_size[pc_i-1], int_size[pc_i-1], 48)
+#
+# inps = {}
+# for pc_i in range(1, 5):
+#     inps['pc' + str(pc_i)] = adex_01.xtr_record[
+#                             sum(adex_01.neurons_per_group[:3 * (pc_i-1)]):sum(adex_01.neurons_per_group[:3 * (pc_i-1)]) +
+#                                                                       int_size[pc_i - 1] ** 2].numpy().reshape(int_size[pc_i-1], int_size[pc_i-1], 48)

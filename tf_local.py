@@ -131,11 +131,14 @@ class AdEx_Layer(object):
 
         # feed external corrent to the first layer
         self.Iext = tf.constant(I_ext, dtype=tf.float32)
-        self.fs = tf.Variable(tf.zeros([self.n_variable, self.batch_size], dtype=tf.float32))
+        # self.fs = tf.Variable(tf.zeros([self.n_variable, self.batch_size], dtype=tf.float32))
+        # self.xtr_s = tf.Variable(tf.zeros([int(self.T / self.dt)], dtype=tf.float32))
+        # self.xxx = tf.Variable(tf.zeros([int(self.T / self.dt)], dtype=tf.float32))
 
         for t in range(int(self.T / self.dt)):
             # update internal variables (v, c, x, x_tr)
             self.update_var()
+            # self.xtr_s[t].assign(self.x_tr[784*3+100, 1])
             # update synaptic variable (Isyn = w * x_tr + Iext)
             self.record_pre_post()
 
@@ -339,18 +342,19 @@ class AdEx_Layer(object):
                       num_epoch, simul_dur, sim_dt, sim_lt,
                       lr, reg_a,
                       input_current,
+                      test_set, test_n_sample,
                       n_class, batch_size,
                       set_idx,
-                      report_idx):
+                      report_idx, n_plot_idx):
 
         # number of batches
         n_batch = int(input_current.shape[1] / batch_size)
 
         start_time = time.time()
         # create a sse dictionary for pc layers
-        sse = {}
+        self.sse = {}
         for i in range(1, self.n_pc_layer + 1):
-            sse['pc' + str(i)] = []
+            self.sse['pc' + str(i)] = []
 
         # initialize epoch sim time average
         epoch_time_avg = 0
@@ -428,20 +432,40 @@ class AdEx_Layer(object):
                 bu_input = self.xtr_record[bu_start_idx:bu_end_idx] / pamp
                 td_pred = (self.w['pc' + str(i)] @ self.xtr_record[td_start_idx:td_end_idx]) / pamp
 
-                sse['pc' + str(i)].append(tf.reduce_sum(tf.reduce_mean((td_pred - bu_input) ** 2, axis=1)).numpy())
-                sse_axs[i - 1].plot(np.arange(epoch_i + 1), np.log(sse['pc' + str(i)]))
+                self.sse['pc' + str(i)].append(tf.reduce_sum(tf.reduce_mean((td_pred - bu_input) ** 2, axis=1)).numpy())
+                sse_axs[i - 1].plot(np.arange(epoch_i + 1), np.log(self.sse['pc' + str(i)]))
                 sse_axs[i - 1].set_xlabel('epoch #')
                 sse_axs[i - 1].set_ylabel('log (SSE)')
                 sse_axs[i - 1].label_outer()
 
             sse_fig.suptitle('SSE update: epoch #{0}/{1}'.format(epoch_i + 1, num_epoch))
-            sse_fig.savefig(self.model_dir + '/log_sse.png'.format(epoch_i + 1))
+            sse_fig.savefig(self.model_dir + '/log_sse.png')
             plt.close(sse_fig)
+
+            if (epoch_i+1) % n_plot_idx == 0:
+                # weight dist change
+                w_fig = weight_dist(savefolder=save_folder,
+                                    weights=self.w, weights_init=self.w_init,
+                                    n_pc=self.n_pc_layer, epoch_i=epoch_i)
+
+                test_fig = self.test_inference(imgs=test_set,
+                                              nsample=test_n_sample, ndigit=n_class,
+                                              simul_dur=simul_dur, sim_dt=sim_dt, sim_lt=sim_lt,
+                                              train_or_test='test')
+
+                # rdm analysis
+                rdm_fig = rdm_plots(model=adex_01,
+                                    testing_current=test_set, n_class=n_class,
+                                    savefolder=save_folder, trained="test",
+                                    epoch_i=epoch_i)
+
+                # save simulation data
+                save_data(save_folder)
 
         end_time = time.time()
         update_sim_time(self.model_dir, '\nsimulation : {0}'.format(str(timedelta(seconds=end_time - start_time))))
 
-        return sse
+        return self.sse
 
 
 def pick_idx(idx_set, digits, size_batch):
@@ -479,7 +503,7 @@ def conn_probs(n_a, n_b):
     return np.sqrt(n_b / n_a) * 0.025
 
 
-def save_data(sim_name):
+def save_results(sim_name):
     # save weights
     save_ws = {}
     for key, ws in adex_01.w.items():
@@ -494,8 +518,9 @@ def save_data(sim_name):
         pickle.dump(save_ws_init, w_init_handle, protocol=pickle.HIGHEST_PROTOCOL)
     # save sse
     with open(sim_name + '/sse_dict.pickle', 'wb') as sse_handle:
-        pickle.dump(sse, sse_handle, protocol=pickle.HIGHEST_PROTOCOL)
+        pickle.dump(adex_01.sse, sse_handle, protocol=pickle.HIGHEST_PROTOCOL)
 
+def save_data(sim_name):
     # save training data
     np.save(sim_name + '/training_data', training_set)
     np.save(sim_name + '/test_data', test_set)
@@ -528,7 +553,8 @@ def matrix_rdm(matrix_data):
     return output
 
 
-def rdm_plots(model, testing_current, n_class, savefolder, trained):
+def rdm_plots(model, testing_current, n_class, savefolder, trained, epoch_i=None):
+
     inp_size, sample_size = testing_current.T.shape
 
     # RDM for input
@@ -593,7 +619,11 @@ def rdm_plots(model, testing_current, n_class, savefolder, trained):
     r2_t.set_xticklabels([pc_i for pc_i in rdms.keys() if 'P' in pc_i])
     r2_t.set_ylim([0, 1])
 
-    fig.savefig(savefolder + '/rdms_plot_' + trained + '.png')
+    save_filename = '{}/rdms_plot_{}.png'.format(savefolder, trained)
+    if epoch_i is not None:
+        save_filename = '{}/rdms_plot_{}_{:03d}.png'.format(savefolder, trained, epoch_i + 1)
+
+    fig.savefig(save_filename)
 
     return fig
 
@@ -606,24 +636,24 @@ with open('adex_constants.pickle', 'rb') as f:
 pamp = 10 ** -12
 
 # network parameters
-n_pred_neurons = [900, 1296, 1156, 1024] # preferably each entry is an integer that has an integer square root
+n_pred_neurons = [900, 400, 225] # preferably each entry is an integer that has an integer square root
 n_pc_layers = len(n_pred_neurons)
 n_gist = 128
 
 # create external input
-batch_size = 128
+batch_size = 256
 n_shape = 3
-n_samples = 512
+n_samples = 256
 
 # simulate
 sim_dur = 500 * 10 ** (-3)  # ms
 dt = 1 * 10 ** (-4)  # ms
-learning_window = 200 * 10 ** -3
+learning_window = 100 * 10 ** -3
 report_index = 1
 
 n_epoch = 3
-lrate = np.array([1.0, 1.0, 1.0, 1.0]) * 10 ** - 7
-reg_alpha = np.array([1.0, 1.0, 1.0, 1.0]) * 10 ** -4
+lrate = np.repeat(1.0, 3) * 10 ** - 7
+reg_alpha = np.repeat(1.0, 3) * 10 ** -3
 
 keras_data = tf.keras.datasets.mnist
 training_set, training_labels, test_set, test_labels, classes, training_set_idx = create_mnist_set(data_type=keras_data,
@@ -635,6 +665,7 @@ n_stim = training_set.shape[1]
 sqrt_nstim = int(np.sqrt(n_stim))
 
 rep_set_idx = pick_idx(training_labels, classes, batch_size)
+n_plot_idx = 1
 
 conn_vals = np.array([conn_probs(a_i, b_i)
                               for a_i, b_i in zip([n_stim] + [n_gist] * n_pc_layers, [n_gist] + n_pred_neurons)]) * 0.05
@@ -671,24 +702,26 @@ sse = adex_01.train_network(num_epoch=n_epoch,
                             simul_dur=sim_dur, sim_dt=dt, sim_lt=learning_window,
                             lr=lrate, reg_a=reg_alpha,
                             input_current=training_set.T,
+                            test_set=testing_set, test_n_sample=test_n_sample,
                             n_class=n_shape, batch_size=batch_size,
-                            set_idx=rep_set_idx, report_idx=report_index)
+                            set_idx=rep_set_idx, report_idx=report_index,
+                            n_plot_idx=n_plot_idx)
 
-# save simulation data
-save_data(save_folder)
+# # save simulation data
+# save_data(save_folder)
 
-# weight dist change
-w_fig = weight_dist(savefolder=save_folder,
-                    weights=adex_01.w, weights_init=adex_01.w_init,
-                    n_pc=adex_01.n_pc_layer)
-
-test_fig = adex_01.test_inference(imgs=testing_set,
-                                  nsample=test_n_sample, ndigit=test_n_shape,
-                                  simul_dur=sim_dur, sim_dt=dt, sim_lt=learning_window,
-                                  train_or_test='test')
-
-
-# rdm analysis
-rdm_fig = rdm_plots(model=adex_01,
-                    testing_current=testing_set, n_class=test_n_shape,
-                    savefolder=save_folder, trained="test")
+# # weight dist change
+# w_fig = weight_dist(savefolder=save_folder,
+#                     weights=adex_01.w, weights_init=adex_01.w_init,
+#                     n_pc=adex_01.n_pc_layer)
+#
+# test_fig = adex_01.test_inference(imgs=testing_set,
+#                                   nsample=test_n_sample, ndigit=test_n_shape,
+#                                   simul_dur=sim_dur, sim_dt=dt, sim_lt=learning_window,
+#                                   train_or_test='test')
+#
+#
+# # rdm analysis
+# rdm_fig = rdm_plots(model=adex_01,
+#                     testing_current=testing_set, n_class=test_n_shape,
+#                     savefolder=save_folder, trained="test")

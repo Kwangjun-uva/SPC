@@ -339,16 +339,16 @@ class AdEx_Layer(object):
                       test_set, test_n_sample,
                       n_class, batch_size,
                       set_idx,
-                      report_idx):
+                      report_idx, n_plot_idx):
 
         # number of batches
         n_batch = int(input_current.shape[1] / batch_size)
 
         start_time = time.time()
         # create a sse dictionary for pc layers
-        sse = {}
+        self.sse = {}
         for i in range(1, self.n_pc_layer + 1):
-            sse['pc' + str(i)] = []
+            self.sse['pc' + str(i)] = []
 
         # initialize epoch sim time average
         epoch_time_avg = 0
@@ -400,7 +400,7 @@ class AdEx_Layer(object):
 
                 [axi.axis('off') for axi in axs.ravel()]
                 fig.suptitle('progress update: epoch #{0}/{1}'.format(epoch_i + 1, num_epoch))
-                fig.savefig(self.model_dir + '/progress_update_{0:0=2d}.png'.format(epoch_i + 1))
+                fig.savefig(self.model_dir + '/progress_update_{:03d}.png'.format(epoch_i + 1))
                 plt.close(fig)
 
             # time remaining
@@ -426,21 +426,21 @@ class AdEx_Layer(object):
                 bu_input = self.xtr_record[bu_start_idx:bu_end_idx] / pamp
                 td_pred = (self.w['pc' + str(i)] @ self.xtr_record[td_start_idx:td_end_idx]) / pamp
 
-                sse['pc' + str(i)].append(tf.reduce_sum(tf.reduce_mean((td_pred - bu_input) ** 2, axis=1)).numpy())
-                sse_axs[i - 1].plot(np.arange(epoch_i + 1), np.log(sse['pc' + str(i)]))
+                self.sse['pc' + str(i)].append(tf.reduce_sum(tf.reduce_mean((td_pred - bu_input) ** 2, axis=1)).numpy())
+                sse_axs[i - 1].plot(np.arange(epoch_i + 1), np.log(self.sse['pc' + str(i)]))
                 sse_axs[i - 1].set_xlabel('epoch #')
                 sse_axs[i - 1].set_ylabel('log (SSE)')
                 sse_axs[i - 1].label_outer()
 
             sse_fig.suptitle('SSE update: epoch #{0}/{1}'.format(epoch_i + 1, num_epoch))
             sse_fig.savefig(self.model_dir + '/log_sse.png'.format(epoch_i + 1))
-            plt.close(sse_fig)
+            plt.close(self.sse_fig)
 
-            if (epoch_i+1) % 10 == 0:
+            if (epoch_i+1) % n_plot_idx == 0:
                 # weight dist change
                 w_fig = weight_dist(savefolder=save_folder,
                                     weights=self.w, weights_init=self.w_init,
-                                    n_pc=self.n_pc_layer)
+                                    n_pc=self.n_pc_layer, epoch_i=epoch_i)
 
                 test_fig = self.test_inference(imgs=test_set,
                                                   nsample=test_n_sample, ndigit=n_class,
@@ -450,12 +450,12 @@ class AdEx_Layer(object):
                 # rdm analysis
                 rdm_fig = rdm_plots(model=adex_01,
                                     testing_current=test_set, n_class=n_class,
-                                    savefolder=save_folder, trained="test")
+                                    savefolder=save_folder, trained="test", epoch_i=epoch_i)
 
         end_time = time.time()
         update_sim_time(self.model_dir, '\nsimulation : {0}'.format(str(timedelta(seconds=end_time - start_time))))
 
-        return sse
+        return self.sse
 
 
 def pick_idx(idx_set, digits, size_batch):
@@ -493,7 +493,7 @@ def conn_probs(n_a, n_b):
     return np.sqrt(n_b / n_a) * 0.025
 
 
-def save_data(sim_name):
+def save_results(sim_name):
     # save weights
     save_ws = {}
     for key, ws in adex_01.w.items():
@@ -508,8 +508,9 @@ def save_data(sim_name):
         pickle.dump(save_ws_init, w_init_handle, protocol=pickle.HIGHEST_PROTOCOL)
     # save sse
     with open(sim_name + '/sse_dict.pickle', 'wb') as sse_handle:
-        pickle.dump(sse, sse_handle, protocol=pickle.HIGHEST_PROTOCOL)
+        pickle.dump(adex_01.sse, sse_handle, protocol=pickle.HIGHEST_PROTOCOL)
 
+def save_data(sim_name):
     # save training data
     np.save(sim_name + '/training_data', training_set)
     np.save(sim_name + '/test_data', test_set)
@@ -529,7 +530,7 @@ def save_data(sim_name):
     sim_params = {'n_pc_layers': n_pc_layers, 'n_pred_neurons': n_pred_neurons, 'n_gist': n_gist,
                   'batch_size': batch_size, 'n_sample': n_samples, 'n_shape': n_shape, 'sim_dur': sim_dur, 'dt': dt,
                   'learning_window': learning_window, 'n_epoch': n_epoch, 'lrate': lrate, 'reg_alpha': reg_alpha,
-                  'report_index': report_index}
+                  'report_index': report_index, 'n_plot_idx': n_plot_idx}
     with open(sim_name + '/sim_params_dict.pickle', 'wb') as handle2:
         pickle.dump(sim_params, handle2, protocol=pickle.HIGHEST_PROTOCOL)
 
@@ -542,7 +543,7 @@ def matrix_rdm(matrix_data):
     return output
 
 
-def rdm_plots(model, testing_current, n_class, savefolder, trained):
+def rdm_plots(model, testing_current, n_class, savefolder, trained, epoch_i=None):
     inp_size, sample_size = testing_current.T.shape
 
     # RDM for input
@@ -607,7 +608,11 @@ def rdm_plots(model, testing_current, n_class, savefolder, trained):
     r2_t.set_xticklabels([pc_i for pc_i in rdms.keys() if 'P' in pc_i])
     r2_t.set_ylim([0, 1])
 
-    fig.savefig(savefolder + '/rdms_plot_' + trained + '.png')
+    save_filename = '{}/rdms_plot_{}.png'.format(savefolder, trained)
+    if epoch_i is not None:
+        save_filename = '{}/rdms_plot_{}_{:03d}.png'.format(savefolder, trained, epoch_i + 1)
+
+    fig.savefig(save_filename)
 
     return fig
 
@@ -620,7 +625,7 @@ with open('adex_constants.pickle', 'rb') as f:
 pamp = 10 ** -12
 
 # network parameters
-n_pred_neurons = [900, 1296, 1024] # preferably each entry is an integer that has an integer square root
+n_pred_neurons = [900, 1296, 1024, 900] # preferably each entry is an integer that has an integer square root
 n_pc_layers = len(n_pred_neurons)
 n_gist = 128
 
@@ -632,8 +637,8 @@ n_samples = 1024
 # simulate
 sim_dur = 500 * 10 ** (-3)  # ms
 dt = 1 * 10 ** (-4)  # ms
-learning_window = 200 * 10 ** -3
-report_index = 10
+learning_window = 100 * 10 ** -3
+report_index = 1
 
 n_epoch = 300
 lrate = np.repeat(5.0, n_pc_layers) * 10 ** - 8
@@ -654,6 +659,7 @@ n_stim = training_set.shape[1]
 sqrt_nstim = int(np.sqrt(n_stim))
 
 rep_set_idx = pick_idx(training_labels, classes, batch_size)
+n_plot_idx = 10
 
 conn_vals = np.array([conn_probs(a_i, b_i)
                               for a_i, b_i in zip([n_stim] + [n_gist] * n_pc_layers, [n_gist] + n_pred_neurons)]) * 0.05
@@ -679,6 +685,8 @@ with tf.device(gpus[gpu_i].name):
     if os.path.exists(save_folder):
         save_folder += datetime.today().strftime('_%Y_%m_%d_%H_%M')
     os.mkdir(save_folder)
+
+    save_data(save_folder)
 
     # print how many GPUs
     update_sim_time(save_folder, "Num GPUs Available: {0}\n".format(tf.config.list_physical_devices('GPU')))
@@ -707,10 +715,10 @@ with tf.device(gpus[gpu_i].name):
                                 input_current=training_set.T,
                                 test_set=testing_set, test_n_sample=test_n_sample,
                                 n_class=n_shape, batch_size=batch_size,
-                                set_idx=rep_set_idx, report_idx=report_index)
+                                set_idx=rep_set_idx, report_idx=report_index, n_plot_idx=n_plot_idx)
 
-    # save simulation data
-    save_data(save_folder)
+    # # save simulation data
+    # save_data(save_folder)
 
     # # weight dist change
     # w_fig = weight_dist(savefolder=save_folder,
