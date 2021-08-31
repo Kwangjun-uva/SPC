@@ -3,8 +3,6 @@ import matplotlib.pyplot as plt
 import os.path
 from datetime import datetime
 
-import create_33images
-
 
 def error_raster(fr_array, n_stim, sample_neuron_idx):
     """

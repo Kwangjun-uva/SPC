@@ -80,13 +80,13 @@ def k_sparseness(fs_np, img_id):
 
 
     fig1, axs1 = plt.subplots(nrows=1, ncols=3)
-    axs1[0].hist(fr_img1_p1, bins='auto', density=True, label='mean= {0:.2f}'.format(fr_img1_p1.mean()))
+    axs1[0].hist(k_sparse_p1, bins='auto', density=True, label='mean= {0:.2f}'.format(k_sparse_p1.mean()))
     axs1[0].set_title('pc1')
-    axs1[1].hist(fr_img1_p2, bins='auto', density=True, label='mean= {0:.2f}'.format(fr_img1_p2.mean()))
+    axs1[1].hist(k_sparse_p2, bins='auto', density=True, label='mean= {0:.2f}'.format(k_sparse_p2.mean()))
     axs1[1].set_title('pc2')
-    axs1[2].hist(fr_img1_p3, bins='auto', density=True, label='mean= {0:.2f}'.format(fr_img1_p3.mean()))
+    axs1[2].hist(k_sparse_p3, bins='auto', density=True, label='mean= {0:.2f}'.format(k_sparse_p3.mean()))
     axs1[2].set_title('pc3')
-    fig1.suptitle('non-zero firing rate')
+    fig1.suptitle('sparseness kurtosis')
     for i in range(3):
         axs1[i].set_aspect('auto')
         axs1[i].legend(loc='upper right')
@@ -95,13 +95,13 @@ def k_sparseness(fs_np, img_id):
 
 
     fig2, axs2 = plt.subplots(nrows=1, ncols=3, sharey=True)
-    axs2[0].hist(fr_img1_p1, bins='auto', density=True, label='mean= {0:.2f}'.format(k_sparse_p1.mean()))
+    axs2[0].hist(fr_img1_p1, bins='auto', density=True, label='mean= {0:.2f}'.format(fr_img1_p1.mean()))
     axs2[0].set_title('pc1')
-    axs2[1].hist(fr_img1_p2, bins='auto', density=True, label='mean= {0:.2f}'.format(k_sparse_p2.mean()))
+    axs2[1].hist(fr_img1_p2, bins='auto', density=True, label='mean= {0:.2f}'.format(fr_img1_p2.mean()))
     axs2[1].set_title('pc2')
-    axs2[2].hist(fr_img1_p3, bins='auto', density=True, label='mean= {0:.2f}'.format(k_sparse_p3.mean()))
+    axs2[2].hist(fr_img1_p3, bins='auto', density=True, label='mean= {0:.2f}'.format(fr_img1_p3.mean()))
     axs2[2].set_title('pc3')
-    fig2.suptitle('sparseness kurtosis')
+    fig2.suptitle('non-zero firing rate')
     for i in range(3):
         axs2[i].set_aspect('auto')
         axs2[i].legend(loc='upper right')
@@ -111,8 +111,8 @@ def k_sparseness(fs_np, img_id):
     return fig1, fig2
 
 fs_np = np.load('sparseness/fs.npy')
-# fr_plot, k_sparse_plot = k_sparseness(fs_np, img_id=1)
-# plt.show()
+fr_plot, k_sparse_plot = k_sparseness(fs_np, img_id=1)
+plt.show()
 
 def k_img_sel(fs_np):
 

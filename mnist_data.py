@@ -1,8 +1,6 @@
-# from InitParams_pc2ffn import *
-# from rsa import reordering, rsa_analysis2
-import matplotlib.pyplot as plt
 import tensorflow as tf
 import numpy as np
+import matplotlib.pyplot as plt
 
 def pre_process(data_set, label_set, nDigit, nSample, classes):
 
@@ -21,6 +19,7 @@ def pre_process(data_set, label_set, nDigit, nSample, classes):
     training_labels = np.ravel(training_labels)
 
     return training_set, training_labels
+
 
 def create_mnist_set(data_type, nSample, nDigit, test_digits=None, shuffle=False):
     if test_digits is not None:

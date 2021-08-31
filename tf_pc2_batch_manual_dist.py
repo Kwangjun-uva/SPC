@@ -88,18 +88,6 @@ class AdEx_Layer(object):
         # weight update time interval
         self.l_time = None
 
-        # # internal variables
-        # self.v = None
-        # self.c = None
-        # self.ref = None
-        # # pre-synaptic variables
-        # self.x = None
-        # self.x_tr = None
-        # # post-synaptic variable
-        # self.Isyn = None
-        # self.fired = None
-        # self.xtr_record = None
-
     def initialize_var(self):
 
         # internal variables
@@ -197,11 +185,13 @@ class AdEx_Layer(object):
         # I = ext
         self.Isyn[:self.n_stim].assign(self.Iext)
         # gist = W[ig]@ Isyn[I]
-        if self._step < 500:
-            input_gist = tf.transpose(self.w['ig']) @ (self.x_tr[:self.neurons_per_group[0]] * self.w_const)
-            self.Isyn[-self.n_gist:, :].assign(input_gist)
-        else:
-            self.Isyn[-self.n_gist:, :].assign(tf.zeros(shape=self.Isyn[-self.n_gist:, :].shape, dtype=tf.float32))
+        input_gist = tf.transpose(self.w['ig']) @ (self.x_tr[:self.neurons_per_group[0]] * self.w_const)
+        self.Isyn[-self.n_gist:, :].assign(input_gist)
+        # if self._step < 500:
+        #     input_gist = tf.transpose(self.w['ig']) @ (self.x_tr[:self.neurons_per_group[0]] * self.w_const)
+        #     self.Isyn[-self.n_gist:, :].assign(input_gist)
+        # else:
+        #     self.Isyn[-self.n_gist:, :].assign(tf.zeros(shape=self.Isyn[-self.n_gist:, :].shape, dtype=tf.float32))
 
         for pc_layer_idx in range(self.n_pc_layer):
             self.Isyn_by_layer(pc_layer_idx)
@@ -429,7 +419,7 @@ class AdEx_Layer(object):
             sse_fig.savefig(self.model_dir + '/log_sse.png'.format(epoch_i + 1))
             plt.close(sse_fig)
 
-            save_results(self.model_dir)
+            save_results(self.model_dir, epoch_i)
 
             if (epoch_i+1) % n_plot_idx == 0:
                 # weight dist change
@@ -458,22 +448,9 @@ def pick_idx(idx_set, digits, size_batch):
 
     n_batch = int(len(idx_set) / size_batch)
 
-    # ll = [idx_set[i * size_batch:i * size_batch + size_batch] for i in range(n_batch)]
     digit_cols = np.zeros(len(digits))
     rrr = []
-    #
-    # # # loop over batches (i.e. number of batches = len(ll))
-    # # for j in range(len(ll)):
-    # #     rri = []
-    # #     # loop over classes
-    # #     for i, digit_i in enumerate(digits):
-    # #         if digit_i in ll[j]:
-    # #             ssi = ll[j].index(digit_i)
-    # #             if digit_cols[i] < 100:
-    # #                 rri.append(ssi)
-    # #                 digit_cols[i] = 100
-    # #     if rri:
-    # #         rrr.append(rri)
+
     ll = idx_set[-size_batch:]
     for i, digit_i in enumerate(digits):
         ssi = ll.index(digit_i)
@@ -483,12 +460,10 @@ def pick_idx(idx_set, digits, size_batch):
 
     return rrr
 
-
 def conn_probs(n_a, n_b):
     return np.sqrt(n_b / n_a) * 0.025
 
-
-def save_results(sim_name):
+def save_results(sim_name, epoch_i):
     # save weights
     save_ws = {}
     for key, ws in adex_01.w.items():
@@ -496,11 +471,12 @@ def save_results(sim_name):
     with open(sim_name + '/weight_dict.pickle', 'wb') as w_handle:
         pickle.dump(save_ws, w_handle, protocol=pickle.HIGHEST_PROTOCOL)
     # save initial weights
-    save_ws_init = {}
-    for key, ws in adex_01.w_init.items():
-        save_ws_init[key] = ws.numpy()
-    with open(sim_name + '/weight_init_dict.pickle', 'wb') as w_init_handle:
-        pickle.dump(save_ws_init, w_init_handle, protocol=pickle.HIGHEST_PROTOCOL)
+    if epoch_i == 0:
+        save_ws_init = {}
+        for key, ws in adex_01.w_init.items():
+            save_ws_init[key] = ws.numpy()
+        with open(sim_name + '/weight_init_dict.pickle', 'wb') as w_init_handle:
+            pickle.dump(save_ws_init, w_init_handle, protocol=pickle.HIGHEST_PROTOCOL)
     # save sse
     with open(sim_name + '/sse_dict.pickle', 'wb') as sse_handle:
         pickle.dump(adex_01.sse, sse_handle, protocol=pickle.HIGHEST_PROTOCOL)
@@ -516,10 +492,10 @@ def save_data(sim_name):
              training_labels=training_labels,
              test_set_labels=test_labels,
              rep_set_idx=rep_set_idx)
-    # np.savez(sim_name + '/test_dict',
-    #          digits=classes,
-    #          test_set_idx=training_set_idx,
-    #          training_labels=test_labels)
+    np.savez(sim_name + '/test_dict',
+             digits=classes,
+             test_set_idx=training_set_idx,
+             training_labels=test_labels)
 
     # save simulation params
     sim_params = {'n_pc_layers': n_pc_layers, 'n_pred_neurons': n_pred_neurons, 'n_gist': n_gist,
@@ -635,7 +611,7 @@ dt = 1 * 10 ** (-4)  # ms
 learning_window = 100 * 10 ** -3
 report_index = 1
 
-n_epoch = 300
+n_epoch = 500
 lrate = np.repeat(5.0, n_pc_layers) * 10 ** - 8
 reg_alpha = np.repeat(1.0, n_pc_layers) * 10 ** -4
 

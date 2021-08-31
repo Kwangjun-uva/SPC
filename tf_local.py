@@ -11,6 +11,8 @@ import os
 import sys
 from datetime import datetime
 
+# unit
+pamp = 10 ** -12
 
 # A basic adex LIF neuron
 def plot_pc1rep(input_img, l1rep, nDigit, nSample):
@@ -36,6 +38,18 @@ def plot_pc1rep(input_img, l1rep, nDigit, nSample):
 
     return fig
 
+def scale_tensor(x, target_min=600 * pamp, target_max=2000 * pamp):
+    ## x is your tensor
+    current_min = tf.reduce_min(x)
+    current_max = tf.reduce_max(x)
+
+    ## scale to [0, 1]
+    x = tf.math.divide_no_nan(tf.subtract(x, current_min), tf.subtract(current_max, current_min))
+
+    ## scale to[target_min, target_max]
+    x = tf.add(tf.multiply(x, tf.subtract(target_max, target_min)), target_min)
+
+    return x
 
 def update_sim_time(folder, print_line):
     sim_time_txt = open(folder + '/sim_time.txt', 'a')
@@ -88,17 +102,10 @@ class AdEx_Layer(object):
         # weight update time interval
         self.l_time = None
 
-        # # internal variables
-        # self.v = None
-        # self.c = None
-        # self.ref = None
-        # # pre-synaptic variables
-        # self.x = None
-        # self.x_tr = None
-        # # post-synaptic variable
-        # self.Isyn = None
-        # self.fired = None
-        # self.xtr_record = None
+        # create a sse dictionary for pc layers
+        self.sse = {}
+        for i in range(1, self.n_pc_layer + 1):
+            self.sse['pc' + str(i)] = []
 
     def initialize_var(self):
 
@@ -131,14 +138,11 @@ class AdEx_Layer(object):
 
         # feed external corrent to the first layer
         self.Iext = tf.constant(I_ext, dtype=tf.float32)
-        # self.fs = tf.Variable(tf.zeros([self.n_variable, self.batch_size], dtype=tf.float32))
-        # self.xtr_s = tf.Variable(tf.zeros([int(self.T / self.dt)], dtype=tf.float32))
-        # self.xxx = tf.Variable(tf.zeros([int(self.T / self.dt)], dtype=tf.float32))
+        self.fs = tf.Variable(tf.zeros([self.n_variable, self.batch_size], dtype=tf.float32))
 
         for t in range(int(self.T / self.dt)):
             # update internal variables (v, c, x, x_tr)
             self.update_var()
-            # self.xtr_s[t].assign(self.x_tr[784*3+100, 1])
             # update synaptic variable (Isyn = w * x_tr + Iext)
             self.record_pre_post()
 
@@ -199,13 +203,15 @@ class AdEx_Layer(object):
     def update_Isyn(self):
 
         # I = ext
-        self.Isyn[:self.n_stim].assign(self.Iext)
+        self.Isyn[:self.n_stim].assign(scale_tensor(self.Iext))
         # gist = W[ig]@ Isyn[I]
-        if self._step < 500:
-            input_gist = tf.transpose(self.w['ig']) @ (self.x_tr[:self.neurons_per_group[0]] * self.w_const)
-            self.Isyn[-self.n_gist:, :].assign(input_gist)
-        else:
-            self.Isyn[-self.n_gist:, :].assign(tf.zeros(shape=self.Isyn[-self.n_gist:, :].shape, dtype=tf.float32))
+        input_gist = tf.transpose(self.w['ig']) @ (self.x_tr[:self.neurons_per_group[0]] * self.w_const)
+        self.Isyn[-self.n_gist:, :].assign(scale_tensor(input_gist))
+        # if self._step < 500:
+        #     input_gist = tf.transpose(self.w['ig']) @ (self.x_tr[:self.neurons_per_group[0]] * self.w_const)
+        #     self.Isyn[-self.n_gist:, :].assign(input_gist)
+        # else:
+        #     self.Isyn[-self.n_gist:, :].assign(tf.zeros(shape=self.Isyn[-self.n_gist:, :].shape, dtype=tf.float32))
 
         for pc_layer_idx in range(self.n_pc_layer):
             self.Isyn_by_layer(pc_layer_idx)
@@ -226,9 +232,11 @@ class AdEx_Layer(object):
                 self.x_tr[next_p_idx:next_p_idx + next_p_size, :] * self.w_const)
 
         # E+ = I - P
-        self.Isyn[curr_p_idx + curr_p_size:curr_p_idx + 2 * curr_p_size, :].assign(tf.add(bu_sensory, -td_pred))
+        self.Isyn[curr_p_idx + curr_p_size:curr_p_idx + 2 * curr_p_size, :].assign(scale_tensor(
+            tf.add(bu_sensory, -td_pred)))
         # E- = -I + P
-        self.Isyn[curr_p_idx + 2 * curr_p_size:next_p_idx, :].assign(tf.add(-bu_sensory, td_pred))
+        self.Isyn[curr_p_idx + 2 * curr_p_size:next_p_idx, :].assign(scale_tensor(
+            tf.add(-bu_sensory, td_pred)))
 
         # P = bu_error + td_error
         bu_err_pos = tf.transpose(self.w['pc' + str(pc_layer_idx + 1)]) @ (
@@ -240,14 +248,15 @@ class AdEx_Layer(object):
         if pc_layer_idx < self.n_pc_layer - 1:
             td_err_pos = self.x_tr[next_p_idx + next_p_size:next_p_idx + 2 * next_p_size] * self.w_const
             td_err_neg = self.x_tr[next_p_idx + 2 * next_p_size:next_p_idx + 3 * next_p_size] * self.w_const
-            self.Isyn[next_p_idx:next_p_idx + next_p_size, :].assign(
+            self.Isyn[next_p_idx:next_p_idx + next_p_size, :].assign(scale_tensor(
                 tf.add(
                     tf.add(
                         tf.add(bu_err_pos, -bu_err_neg),
                         tf.add(-td_err_pos, td_err_neg)),
-                    gist))
+                    gist)))
         else:
-            self.Isyn[next_p_idx:next_p_idx + next_p_size, :].assign(tf.add(tf.add(bu_err_pos, -bu_err_neg), gist))
+            self.Isyn[next_p_idx:next_p_idx + next_p_size, :].assign(scale_tensor(
+                tf.add(tf.add(bu_err_pos, -bu_err_neg), gist)))
 
     def connect_pc(self):
 
@@ -342,7 +351,6 @@ class AdEx_Layer(object):
                       num_epoch, simul_dur, sim_dt, sim_lt,
                       lr, reg_a,
                       input_current,
-                      test_set, test_n_sample,
                       n_class, batch_size,
                       set_idx,
                       report_idx, n_plot_idx):
@@ -351,10 +359,6 @@ class AdEx_Layer(object):
         n_batch = int(input_current.shape[1] / batch_size)
 
         start_time = time.time()
-        # create a sse dictionary for pc layers
-        self.sse = {}
-        for i in range(1, self.n_pc_layer + 1):
-            self.sse['pc' + str(i)] = []
 
         # initialize epoch sim time average
         epoch_time_avg = 0
@@ -384,43 +388,52 @@ class AdEx_Layer(object):
 
             if ((epoch_i + 1) % report_idx == 0):  # and (len(set_idx) > iter_i):
                 set_id = set_idx  # [iter_i]
-                # plot progres
-                input_img = self.xtr_record[:self.n_stim].numpy()[:, set_id].reshape(sqrt_nstim, sqrt_nstim,
-                                                                                     len(set_id)) / pamp
-                reconst_img = (self.w['pc1'].numpy() @
-                               self.xtr_record[n_stim * 3:
-                                               n_stim * 3 + self.n_pred[0]].numpy()[:, set_id]).reshape(sqrt_nstim,
-                                                                                                        sqrt_nstim,
-                                                                                                        len(set_id)) / pamp
+                # # plot progres : p1
+                # input_img = self.xtr_record[:self.n_stim].numpy()[:, set_id].reshape(sqrt_nstim, sqrt_nstim,
+                #                                                                      len(set_id)) / pamp
+                # reconst_img = (self.w['pc1'].numpy() @
+                #                self.xtr_record[n_stim * 3:
+                #                                n_stim * 3 + self.n_pred[0]].numpy()[:, set_id]).reshape(sqrt_nstim,
+                #                                                                                         sqrt_nstim,
+                #                                                                                         len(set_id)) / pamp
 
-                fig, axs = plt.subplots(ncols=3, nrows=n_class, figsize=(4 * 3, 4 * n_class))
-                for plt_idx in range(len(set_id)):
-                    input_plot = axs[plt_idx, 0].imshow(input_img[:, :, plt_idx], cmap='Reds', vmin=600, vmax=4000)
-                    fig.colorbar(input_plot, ax=axs[plt_idx, 0], shrink=0.6)
-                    reconst_plot = axs[plt_idx, 1].imshow(reconst_img[:, :, plt_idx], cmap='Reds', vmin=600, vmax=4000)
-                    fig.colorbar(reconst_plot, ax=axs[plt_idx, 1], shrink=0.6)
-                    diff_plot = axs[plt_idx, 2].imshow(input_img[:, :, plt_idx] - reconst_img[:, :, plt_idx],
-                                                       cmap='bwr',
-                                                       vmin=-1000, vmax=1000)
-                    fig.colorbar(diff_plot, ax=axs[plt_idx, 2], shrink=0.6)
+                neurons_per_pc = self.neurons_per_group[::3]
+                fig, axs = plt.subplots(ncols=3 * n_pc_layers, nrows=n_class, figsize=(4 * 3 * n_pc_layers, 4 * n_class))
+                for pc_i in range(self.n_pc_layer): # for a 3-PC model, 0, 1, 2
+                    # plot progres : p1 - p3
+                    inp_size = int(np.sqrt(neurons_per_pc[pc_i]))
+                    input_img = self.xtr_record[sum(self.neurons_per_group[:3 * pc_i]):
+                                                sum(self.neurons_per_group[:3 * pc_i])
+                                                    + neurons_per_pc[pc_i]].numpy()[:, set_id].reshape(
+                        inp_size, inp_size, len(set_id)) / pamp
+                    # pred_size = int(np.sqrt(self.n_pred[pc_i]))
+                    reconst_img = (self.w['pc' + str(pc_i + 1)].numpy() @
+                                   self.xtr_record[sum(self.neurons_per_group[:3 * (pc_i + 1)]) :
+                                                   sum(self.neurons_per_group[:3 * (pc_i + 1)])
+                                                   + self.n_pred[pc_i]]).numpy()[:, set_id].reshape(inp_size,
+                                                                                                    inp_size,
+                                                                                                    len(set_id)) / pamp
+
+                    for plt_idx in range(len(set_id)):
+                        input_plot = axs[plt_idx, 0 + pc_i * n_pc_layers].imshow(input_img[:, :, plt_idx], cmap='Reds')#, vmin=600, vmax=4000)
+                        fig.colorbar(input_plot, ax=axs[plt_idx, 0 + pc_i * n_pc_layers], shrink=0.6)
+                        reconst_plot = axs[plt_idx, 1 + pc_i * n_pc_layers].imshow(reconst_img[:, :, plt_idx], cmap='Reds')#, vmin=600, vmax=4000)
+                        fig.colorbar(reconst_plot, ax=axs[plt_idx, 1 + pc_i * n_pc_layers], shrink=0.6)
+                        diff_plot = axs[plt_idx, 2 + pc_i * n_pc_layers].imshow(input_img[:, :, plt_idx] - reconst_img[:, :, plt_idx],
+                                                           cmap='bwr',
+                                                           vmin=-1000, vmax=1000)
+                        fig.colorbar(diff_plot, ax=axs[plt_idx, 2 + pc_i * n_pc_layers], shrink=0.6)
 
                 [axi.axis('off') for axi in axs.ravel()]
                 fig.suptitle('progress update: epoch #{0}/{1}'.format(epoch_i + 1, num_epoch))
                 fig.savefig(self.model_dir + '/progress_update_{0:0=2d}.png'.format(epoch_i + 1))
                 plt.close(fig)
+                plt.close('all')
 
             # time remaining
             epoch_time_avg += time.time() - epoch_time
             update_sim_time(self.model_dir, '\n***** time remaining = {0}'.format(
                 str(timedelta(seconds=epoch_time_avg / (epoch_i + 1) * (num_epoch - epoch_i - 1)))))
-            # print('***** time remaining = {0}'.format(
-            #     str(timedelta(seconds=epoch_time_avg / (epoch_i + 1) * (num_epoch - epoch_i - 1)))))
-
-            # calculate sse
-            # l0_input = tf.reshape(self.xtr_record[:n_stim, :], (sqrt_nstim, sqrt_nstim, self.batch_size)) / pamp
-            # l1_pred = tf.reshape(
-            #     self.w['pc1'] @ self.xtr_record[n_stim * 3:n_stim * 3 + self.n_pred[0], :],
-            #     (sqrt_nstim, sqrt_nstim, self.batch_size)) / pamp
 
             sse_fig, sse_axs = plt.subplots(nrows=self.n_pc_layer, ncols=1, sharex=True)
             for i in range(1, self.n_pc_layer + 1):
@@ -439,56 +452,55 @@ class AdEx_Layer(object):
                 sse_axs[i - 1].label_outer()
 
             sse_fig.suptitle('SSE update: epoch #{0}/{1}'.format(epoch_i + 1, num_epoch))
-            sse_fig.savefig(self.model_dir + '/log_sse.png')
+            sse_fig.savefig(self.model_dir + '/log_sse.png'.format(epoch_i + 1))
             plt.close(sse_fig)
 
-            if (epoch_i+1) % n_plot_idx == 0:
+            self.save_results(epoch_i)
+
+            if (epoch_i + 1) % n_plot_idx == 0:
                 # weight dist change
                 w_fig = weight_dist(savefolder=save_folder,
                                     weights=self.w, weights_init=self.w_init,
                                     n_pc=self.n_pc_layer, epoch_i=epoch_i)
 
                 test_fig = self.test_inference(imgs=test_set,
-                                              nsample=test_n_sample, ndigit=n_class,
-                                              simul_dur=simul_dur, sim_dt=sim_dt, sim_lt=sim_lt,
-                                              train_or_test='test')
+                                               nsample=test_n_sample, ndigit=n_class,
+                                               simul_dur=simul_dur, sim_dt=sim_dt, sim_lt=sim_lt,
+                                               train_or_test='test')
 
                 # rdm analysis
                 rdm_fig = rdm_plots(model=adex_01,
                                     testing_current=test_set, n_class=n_class,
-                                    savefolder=save_folder, trained="test",
-                                    epoch_i=epoch_i)
-
-                # save simulation data
-                save_data(save_folder)
+                                    savefolder=save_folder, trained="test", epoch_i=epoch_i)
 
         end_time = time.time()
         update_sim_time(self.model_dir, '\nsimulation : {0}'.format(str(timedelta(seconds=end_time - start_time))))
 
         return self.sse
 
+    def save_results(self, epoch_i):
+        # save weights
+        save_ws = {}
+        for key, ws in self.w.items():
+            save_ws[key] = ws.numpy()
+        with open(self.model_dir + '/weight_dict.pickle', 'wb') as w_handle:
+            pickle.dump(save_ws, w_handle, protocol=pickle.HIGHEST_PROTOCOL)
+        # save initial weights
+        if epoch_i == 0:
+            save_ws_init = {}
+            for key, ws in self.w_init.items():
+                save_ws_init[key] = ws.numpy()
+            with open(self.model_dir + '/weight_init_dict.pickle', 'wb') as w_init_handle:
+                pickle.dump(save_ws_init, w_init_handle, protocol=pickle.HIGHEST_PROTOCOL)
+        # save sse
+        with open(self.model_dir + '/sse_dict.pickle', 'wb') as sse_handle:
+            pickle.dump(self.sse, sse_handle, protocol=pickle.HIGHEST_PROTOCOL)
 
 def pick_idx(idx_set, digits, size_batch):
-    # return_list = []
 
-    n_batch = int(len(idx_set) / size_batch)
-
-    # ll = [idx_set[i * size_batch:i * size_batch + size_batch] for i in range(n_batch)]
     digit_cols = np.zeros(len(digits))
     rrr = []
-    #
-    # # # loop over batches (i.e. number of batches = len(ll))
-    # # for j in range(len(ll)):
-    # #     rri = []
-    # #     # loop over classes
-    # #     for i, digit_i in enumerate(digits):
-    # #         if digit_i in ll[j]:
-    # #             ssi = ll[j].index(digit_i)
-    # #             if digit_cols[i] < 100:
-    # #                 rri.append(ssi)
-    # #                 digit_cols[i] = 100
-    # #     if rri:
-    # #         rrr.append(rri)
+
     ll = idx_set[-size_batch:]
     for i, digit_i in enumerate(digits):
         ssi = ll.index(digit_i)
@@ -502,24 +514,6 @@ def pick_idx(idx_set, digits, size_batch):
 def conn_probs(n_a, n_b):
     return np.sqrt(n_b / n_a) * 0.025
 
-
-def save_results(sim_name):
-    # save weights
-    save_ws = {}
-    for key, ws in adex_01.w.items():
-        save_ws[key] = ws.numpy()
-    with open(sim_name + '/weight_dict.pickle', 'wb') as w_handle:
-        pickle.dump(save_ws, w_handle, protocol=pickle.HIGHEST_PROTOCOL)
-    # save initial weights
-    save_ws_init = {}
-    for key, ws in adex_01.w_init.items():
-        save_ws_init[key] = ws.numpy()
-    with open(sim_name + '/weight_init_dict.pickle', 'wb') as w_init_handle:
-        pickle.dump(save_ws_init, w_init_handle, protocol=pickle.HIGHEST_PROTOCOL)
-    # save sse
-    with open(sim_name + '/sse_dict.pickle', 'wb') as sse_handle:
-        pickle.dump(adex_01.sse, sse_handle, protocol=pickle.HIGHEST_PROTOCOL)
-
 def save_data(sim_name):
     # save training data
     np.save(sim_name + '/training_data', training_set)
@@ -531,16 +525,18 @@ def save_data(sim_name):
              training_labels=training_labels,
              test_set_labels=test_labels,
              rep_set_idx=rep_set_idx)
-    # np.savez(sim_name + '/test_dict',
-    #          digits=classes,
-    #          test_set_idx=training_set_idx,
-    #          training_labels=test_labels)
+    np.savez(sim_name + '/test_dict',
+             digits=classes,
+             test_set_idx=training_set_idx,
+             training_labels=test_labels)
 
     # save simulation params
     sim_params = {'n_pc_layers': n_pc_layers, 'n_pred_neurons': n_pred_neurons, 'n_gist': n_gist,
-                  'batch_size': batch_size, 'n_sample': n_samples, 'n_shape': n_shape, 'sim_dur': sim_dur, 'dt': dt,
-                  'learning_window': learning_window, 'n_epoch': n_epoch, 'lrate': lrate, 'reg_alpha': reg_alpha,
-                  'report_index': report_index}
+                  'batch_size': batch_size, 'n_samples': n_samples, 'n_shape': n_shape,
+                  'sim_dur': sim_dur, 'dt': dt, 'learning_window': learning_window,
+                  'n_epoch': n_epoch, 'lrate': lrate, 'reg_alpha': reg_alpha,
+                  'report_index': report_index, 'n_plot_idx': n_plot_idx,
+                  'conn_vals': conn_vals, 'max_w': max_vals}
     with open(sim_name + '/sim_params_dict.pickle', 'wb') as handle2:
         pickle.dump(sim_params, handle2, protocol=pickle.HIGHEST_PROTOCOL)
 
@@ -554,7 +550,6 @@ def matrix_rdm(matrix_data):
 
 
 def rdm_plots(model, testing_current, n_class, savefolder, trained, epoch_i=None):
-
     inp_size, sample_size = testing_current.T.shape
 
     # RDM for input
@@ -627,101 +622,97 @@ def rdm_plots(model, testing_current, n_class, savefolder, trained, epoch_i=None
 
     return fig
 
+if __name__ == "__main__":
 
-# load constants
-with open('adex_constants.pickle', 'rb') as f:
-    AdEx = pickle.load(f)
+    # load constants
+    with open('adex_constants.pickle', 'rb') as f:
+        AdEx = pickle.load(f)
 
-# unit
-pamp = 10 ** -12
+    # network parameters
+    n_pred_neurons = [169, 144, 100] # preferably each entry is an integer that has an integer square root
+    n_pc_layers = len(n_pred_neurons)
+    n_gist = 64
 
-# network parameters
-n_pred_neurons = [900, 400, 225] # preferably each entry is an integer that has an integer square root
-n_pc_layers = len(n_pred_neurons)
-n_gist = 128
+    # create external input
+    batch_size = 128
+    n_shape = 3
+    n_samples = 128
 
-# create external input
-batch_size = 256
-n_shape = 3
-n_samples = 256
+    # simulate
+    sim_dur = 500 * 10 ** (-3)  # ms
+    dt = 1 * 10 ** (-4)  # ms
+    learning_window = 100 * 10 ** -3
+    report_index = 1
 
-# simulate
-sim_dur = 500 * 10 ** (-3)  # ms
-dt = 1 * 10 ** (-4)  # ms
-learning_window = 100 * 10 ** -3
-report_index = 1
+    n_epoch = 10
+    lrate = np.repeat(1.0, n_pc_layers) * 10 ** -7
+    reg_alpha = np.repeat(1.0, n_pc_layers) * 10 ** -3
 
-n_epoch = 3
-lrate = np.repeat(1.0, 3) * 10 ** - 7
-reg_alpha = np.repeat(1.0, 3) * 10 ** -3
+    keras_data = tf.keras.datasets.mnist
+    training_set, training_labels, test_set, test_labels, classes, training_set_idx = create_mnist_set(data_type=keras_data,
+                                                                                                       nDigit=n_shape,
+                                                                                                       nSample=n_samples,
+                                                                                                       shuffle=True)
+    training_set *= pamp
+    n_stim = training_set.shape[1]
+    sqrt_nstim = int(np.sqrt(n_stim))
 
-keras_data = tf.keras.datasets.mnist
-training_set, training_labels, test_set, test_labels, classes, training_set_idx = create_mnist_set(data_type=keras_data,
-                                                                                                   nDigit=n_shape,
-                                                                                                   nSample=n_samples,
-                                                                                                   shuffle=True)
-training_set *= pamp
-n_stim = training_set.shape[1]
-sqrt_nstim = int(np.sqrt(n_stim))
+    rep_set_idx = pick_idx(training_labels, classes, batch_size)
+    n_plot_idx = 5
 
-rep_set_idx = pick_idx(training_labels, classes, batch_size)
-n_plot_idx = 1
+    conn_vals = np.array([conn_probs(a_i, b_i)
+                                  for a_i, b_i in zip([n_stim] + [n_gist] * n_pc_layers, [n_gist] + n_pred_neurons)]) * 0.05
 
-conn_vals = np.array([conn_probs(a_i, b_i)
-                              for a_i, b_i in zip([n_stim] + [n_gist] * n_pc_layers, [n_gist] + n_pred_neurons)]) * 0.05
+    max_vals = np.array([1] * (n_pc_layers + 1)) * 0.25 * 5
 
-max_vals = np.array([1] * (n_pc_layers + 1)) * 0.25 * 5
+    # test inference on test data
+    test_n_shape = n_shape
+    test_n_sample = 16
+    test_iter_idx = int(n_samples/test_n_sample)
 
-# test inference on test data
-test_n_shape = n_shape
-test_n_sample = 16
-test_iter_idx = int(n_samples/test_n_sample)
+    testing_set = test_set[::test_iter_idx]
 
-testing_set = test_set[::test_iter_idx]
+    # create a folder to save results
+    save_folder = datetime.today().strftime('%Y_%m_%d_%H_%M') + '_nD' + str(n_shape) + 'nS' + str(n_samples) + 'nEP' + str(n_epoch)
+    os.mkdir(save_folder)
 
-# create a folder to save results
-save_folder = datetime.today().strftime('%Y_%m_%d_%H_%M') + '_nD' + str(n_shape) + 'nS' + str(n_samples) + 'nEP' + str(n_epoch)
-os.mkdir(save_folder)
+    # plot the same test set
+    plot_mnist_set(testset=training_set, testset_idx=training_set_idx,
+                   nDigit=n_shape, nSample=n_samples,
+                   savefolder=save_folder)
 
-# plot the same test set
-plot_mnist_set(testset=training_set, testset_idx=training_set_idx,
-               nDigit=n_shape, nSample=n_samples,
-               savefolder=save_folder)
-
-# build network
-adex_01 = AdEx_Layer(sim_directory=save_folder,
-                     neuron_model_constants=AdEx,
-                     num_pc_layers=n_pc_layers,
-                     num_pred_neurons=n_pred_neurons,
-                     num_stim=n_stim,
-                     gist_num=n_gist, gist_connp=conn_vals, gist_maxw=max_vals)
+    # build network
+    adex_01 = AdEx_Layer(sim_directory=save_folder,
+                         neuron_model_constants=AdEx,
+                         num_pc_layers=n_pc_layers,
+                         num_pred_neurons=n_pred_neurons,
+                         num_stim=n_stim,
+                         gist_num=n_gist, gist_connp=conn_vals, gist_maxw=max_vals)
 
 
-# train_network(self, num_epoch, sim_dur, sim_dt, sim_lt, lr, reg_a, input_current, n_shape, n_batch, set_idx):
-sse = adex_01.train_network(num_epoch=n_epoch,
-                            simul_dur=sim_dur, sim_dt=dt, sim_lt=learning_window,
-                            lr=lrate, reg_a=reg_alpha,
-                            input_current=training_set.T,
-                            test_set=testing_set, test_n_sample=test_n_sample,
-                            n_class=n_shape, batch_size=batch_size,
-                            set_idx=rep_set_idx, report_idx=report_index,
-                            n_plot_idx=n_plot_idx)
+    # train_network(self, num_epoch, sim_dur, sim_dt, sim_lt, lr, reg_a, input_current, n_shape, n_batch, set_idx):
+    sse = adex_01.train_network(num_epoch=n_epoch,
+                                simul_dur=sim_dur, sim_dt=dt, sim_lt=learning_window,
+                                lr=lrate, reg_a=reg_alpha,
+                                input_current=training_set.T,
+                                n_class=n_shape, batch_size=batch_size,
+                                set_idx=rep_set_idx, report_idx=report_index, n_plot_idx=n_plot_idx)
 
-# # save simulation data
-# save_data(save_folder)
+    # save simulation data
+    save_data(save_folder)
 
-# # weight dist change
-# w_fig = weight_dist(savefolder=save_folder,
-#                     weights=adex_01.w, weights_init=adex_01.w_init,
-#                     n_pc=adex_01.n_pc_layer)
-#
-# test_fig = adex_01.test_inference(imgs=testing_set,
-#                                   nsample=test_n_sample, ndigit=test_n_shape,
-#                                   simul_dur=sim_dur, sim_dt=dt, sim_lt=learning_window,
-#                                   train_or_test='test')
-#
-#
-# # rdm analysis
-# rdm_fig = rdm_plots(model=adex_01,
-#                     testing_current=testing_set, n_class=test_n_shape,
-#                     savefolder=save_folder, trained="test")
+    # # weight dist change
+    # w_fig = weight_dist(savefolder=save_folder,
+    #                     weights=adex_01.w, weights_init=adex_01.w_init,
+    #                     n_pc=adex_01.n_pc_layer)
+    #
+    # test_fig = adex_01.test_inference(imgs=testing_set,
+    #                                   nsample=test_n_sample, ndigit=test_n_shape,
+    #                                   simul_dur=sim_dur, sim_dt=dt, sim_lt=learning_window,
+    #                                   train_or_test='test')
+    #
+    #
+    # # rdm analysis
+    # rdm_fig = rdm_plots(model=adex_01,
+    #                     testing_current=testing_set, n_class=test_n_shape,
+    #                     savefolder=save_folder, trained="test")
