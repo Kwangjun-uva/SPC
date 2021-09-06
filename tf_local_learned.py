@@ -133,17 +133,17 @@ def new_train(self,
                                                                                                 len(set_id)) / pamp
 
                 for plt_idx in range(len(set_id)):
-                    input_plot = axs[plt_idx, 0 + pc_i * self.n_pc_layer].imshow(input_img[:, :, plt_idx],
-                                                                             cmap='Reds', vmin=600, vmax=4000)
-                    fig.colorbar(input_plot, ax=axs[plt_idx, 0 + pc_i * self.n_pc_layer], shrink=0.6)
-                    reconst_plot = axs[plt_idx, 1 + pc_i * self.n_pc_layer].imshow(reconst_img[:, :, plt_idx],
-                                                                               cmap='Reds', vmin=600, vmax=4000)
-                    fig.colorbar(reconst_plot, ax=axs[plt_idx, 1 + pc_i * self.n_pc_layer], shrink=0.6)
-                    diff_plot = axs[plt_idx, 2 + pc_i * self.n_pc_layer].imshow(
+                    input_plot = axs[plt_idx, 0 + pc_i * 3].imshow(input_img[:, :, plt_idx],
+                                                                             cmap='Reds', vmin=0, vmax=3000)
+                    fig.colorbar(input_plot, ax=axs[plt_idx, 0 + pc_i * 3], shrink=0.6)
+                    reconst_plot = axs[plt_idx, 1 + pc_i * 3].imshow(reconst_img[:, :, plt_idx],
+                                                                               cmap='Reds', vmin=0, vmax=3000)
+                    fig.colorbar(reconst_plot, ax=axs[plt_idx, 1 + pc_i * 3], shrink=0.6)
+                    diff_plot = axs[plt_idx, 2 + pc_i * 3].imshow(
                         input_img[:, :, plt_idx] - reconst_img[:, :, plt_idx],
                         cmap='bwr',
                         vmin=-1000, vmax=1000)
-                    fig.colorbar(diff_plot, ax=axs[plt_idx, 2 + pc_i * self.n_pc_layer], shrink=0.6)
+                    fig.colorbar(diff_plot, ax=axs[plt_idx, 2 + pc_i * 3], shrink=0.6)
 
             [axi.axis('off') for axi in axs.ravel()]
             fig.suptitle('progress update: epoch #{0}/{1}'.format(epoch_i + 1 + prg_start_idx,
@@ -193,7 +193,7 @@ def new_train(self,
                                 testing_current=test_set, n_class=n_class,
                                 savefolder=self.model_dir, trained="test", epoch_i=epoch_i + prg_start_idx)
 
-        self.save_results(epoch_i + prg_start_idx)
+            self.save_results(epoch_i + prg_start_idx)
 
     end_time = time.time()
     update_sim_time(self.model_dir, '\nsimulation : {0}'.format(str(timedelta(seconds=end_time - start_time))))
@@ -208,7 +208,7 @@ with open('adex_constants.pickle', 'rb') as f:
     AdEx = pickle.load(f)
 
 # specify the folder
-save_folder = '2021_08_29_01_14_nD3nS128nEP10'
+save_folder = '2021_09_02_16_04_nD3nS128nEP10'
 
 # load sse from previous training
 with open(save_folder + '/sse_dict.pickle', 'rb') as sse_handle:
@@ -255,7 +255,7 @@ sqrt_nstim = int(np.sqrt(n_stim))
 
 # test inference on test data
 test_n_shape = n_shape
-test_n_sample = 16
+test_n_sample = n_samples
 test_iter_idx = int(n_samples/test_n_sample)
 
 testing_set = test_set[::test_iter_idx]

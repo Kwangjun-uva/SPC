@@ -38,7 +38,7 @@ def plot_pc1rep(input_img, l1rep, nDigit, nSample):
 
     return fig
 
-def scale_tensor(x, target_min=600 * pamp, target_max=2000 * pamp):
+def scale_tensor(x, target_min=600 * pamp, target_max=3000 * pamp):
     ## x is your tensor
     current_min = tf.reduce_min(x)
     current_max = tf.reduce_max(x)
@@ -203,20 +203,15 @@ class AdEx_Layer(object):
     def update_Isyn(self):
 
         # I = ext
-        self.Isyn[:self.n_stim].assign(scale_tensor(self.Iext))
+        self.Isyn[:self.n_stim].assign(self.Iext)
         # gist = W[ig]@ Isyn[I]
         input_gist = tf.transpose(self.w['ig']) @ (self.x_tr[:self.neurons_per_group[0]] * self.w_const)
-        self.Isyn[-self.n_gist:, :].assign(scale_tensor(input_gist))
-        # if self._step < 500:
-        #     input_gist = tf.transpose(self.w['ig']) @ (self.x_tr[:self.neurons_per_group[0]] * self.w_const)
-        #     self.Isyn[-self.n_gist:, :].assign(input_gist)
-        # else:
-        #     self.Isyn[-self.n_gist:, :].assign(tf.zeros(shape=self.Isyn[-self.n_gist:, :].shape, dtype=tf.float32))
+        self.Isyn[-self.n_gist:, :].assign(input_gist)
 
         for pc_layer_idx in range(self.n_pc_layer):
-            self.Isyn_by_layer(pc_layer_idx)
+            self.Isyn_by_layer(pc_layer_idx, wc=self.w_const * tf.cast(tf.greater(self._step - 500, 0), tf.float32))
 
-    def Isyn_by_layer(self, pc_layer_idx):
+    def Isyn_by_layer(self, pc_layer_idx, wc):
         # index of current prediction layer
         curr_p_idx = sum(self.neurons_per_group[:pc_layer_idx * 3])
         curr_p_size = self.neurons_per_group[pc_layer_idx * 3]
@@ -226,37 +221,37 @@ class AdEx_Layer(object):
         next_p_size = self.neurons_per_group[pc_layer_idx * 3 + 3]
 
         # input / predictin error
-        bu_sensory = self.x_tr[curr_p_idx: curr_p_idx + curr_p_size, :] * self.w_const
+        bu_sensory = scale_tensor(self.x_tr[curr_p_idx: curr_p_idx + curr_p_size, :] * wc)
         # prediction
-        td_pred = self.w['pc' + str(pc_layer_idx + 1)] @ (
-                self.x_tr[next_p_idx:next_p_idx + next_p_size, :] * self.w_const)
+        td_pred = scale_tensor(self.w['pc' + str(pc_layer_idx + 1)] @ (
+                self.x_tr[next_p_idx:next_p_idx + next_p_size, :] * wc))
 
         # E+ = I - P
-        self.Isyn[curr_p_idx + curr_p_size:curr_p_idx + 2 * curr_p_size, :].assign(scale_tensor(
-            tf.add(bu_sensory, -td_pred)))
+        self.Isyn[curr_p_idx + curr_p_size:curr_p_idx + 2 * curr_p_size, :].assign(
+            tf.add(bu_sensory, -td_pred))
         # E- = -I + P
-        self.Isyn[curr_p_idx + 2 * curr_p_size:next_p_idx, :].assign(scale_tensor(
-            tf.add(-bu_sensory, td_pred)))
+        self.Isyn[curr_p_idx + 2 * curr_p_size:next_p_idx, :].assign(
+            tf.add(-bu_sensory, td_pred))
 
         # P = bu_error + td_error
-        bu_err_pos = tf.transpose(self.w['pc' + str(pc_layer_idx + 1)]) @ (
-                self.x_tr[curr_p_idx + curr_p_size:curr_p_idx + 2 * curr_p_size, :] * self.w_const)
-        bu_err_neg = tf.transpose(self.w['pc' + str(pc_layer_idx + 1)]) @ (
-                self.x_tr[curr_p_idx + 2 * curr_p_size:next_p_idx, :] * self.w_const)
+        bu_err_pos = scale_tensor(tf.transpose(self.w['pc' + str(pc_layer_idx + 1)]) @ (
+                self.x_tr[curr_p_idx + curr_p_size:curr_p_idx + 2 * curr_p_size, :] * wc))
+        bu_err_neg = scale_tensor(tf.transpose(self.w['pc' + str(pc_layer_idx + 1)]) @ (
+                self.x_tr[curr_p_idx + 2 * curr_p_size:next_p_idx, :] * wc))
         gist = tf.transpose(self.w['gp' + str(pc_layer_idx + 1)]) @ (self.x_tr[-self.n_gist:, :] * self.w_const)
 
         if pc_layer_idx < self.n_pc_layer - 1:
-            td_err_pos = self.x_tr[next_p_idx + next_p_size:next_p_idx + 2 * next_p_size] * self.w_const
-            td_err_neg = self.x_tr[next_p_idx + 2 * next_p_size:next_p_idx + 3 * next_p_size] * self.w_const
-            self.Isyn[next_p_idx:next_p_idx + next_p_size, :].assign(scale_tensor(
+            td_err_pos = self.x_tr[next_p_idx + next_p_size:next_p_idx + 2 * next_p_size] * wc#self.w_const
+            td_err_neg = self.x_tr[next_p_idx + 2 * next_p_size:next_p_idx + 3 * next_p_size] * wc#self.w_const
+            self.Isyn[next_p_idx:next_p_idx + next_p_size, :].assign(
                 tf.add(
                     tf.add(
                         tf.add(bu_err_pos, -bu_err_neg),
                         tf.add(-td_err_pos, td_err_neg)),
-                    gist)))
+                    gist))
         else:
-            self.Isyn[next_p_idx:next_p_idx + next_p_size, :].assign(scale_tensor(
-                tf.add(tf.add(bu_err_pos, -bu_err_neg), gist)))
+            self.Isyn[next_p_idx:next_p_idx + next_p_size, :].assign(
+                tf.add(tf.add(bu_err_pos, -bu_err_neg), gist))
 
     def connect_pc(self):
 
@@ -309,6 +304,28 @@ class AdEx_Layer(object):
             pred_idx = sum(self.neurons_per_group[:pc_layer_idx * 3 + 3])
             pred_size = self.n_pred[pc_layer_idx]
 
+            # # pre
+            # xtr_ep = scale_tensor(
+            #     tf.einsum('ij,ik->ikj',
+            #               self.xtr_record[err_idx: err_idx + err_size],
+            #               self.w['pc' + str(pc_layer_idx + 1)])
+            # ) / pamp
+            # xtr_en = scale_tensor(
+            #     tf.einsum('ij,ik->ikj',
+            #               self.xtr_record[err_idx + err_size: err_idx + 2 * err_size],
+            #               self.w['pc' + str(pc_layer_idx + 1)])
+            # ) / pamp
+            # xtr_p = scale_tensor(
+            #     tf.einsum('ij,ki->kij',
+            #               self.xtr_record[pred_idx: pred_idx + pred_size],
+            #               self.w['pc' + str(pc_layer_idx + 1)])
+            # ) / pamp
+            #
+            # dw_mean_pos = lr[pc_layer_idx] * tf.reduce_mean(xtr_ep * xtr_p, axis=2) - alpha_w[pc_layer_idx] * self.w['pc' + str(pc_layer_idx + 1)]
+            # dw_mean_neg = lr[pc_layer_idx] * tf.reduce_mean(xtr_en * xtr_p, axis=2) - alpha_w[pc_layer_idx] * self.w['pc' + str(pc_layer_idx + 1)]
+            # xtr_ep = scale_tensor(self.xtr_record[err_idx: err_idx + err_size])
+            # xtr_en = scale_tensor(self.xtr_record[err_idx + err_size: err_idx + 2 * err_size])
+            # xtr_p = scale_tensor(self.xtr_record[pred_idx: pred_idx + pred_size])
             xtr_ep = self.xtr_record[err_idx: err_idx + err_size]
             xtr_en = self.xtr_record[err_idx + err_size: err_idx + 2 * err_size]
             xtr_p = self.xtr_record[pred_idx: pred_idx + pred_size]
@@ -316,10 +333,13 @@ class AdEx_Layer(object):
             dw_all_pos = lr[pc_layer_idx] * tf.einsum('ij,kj->ikj', xtr_ep / 10 ** -12, xtr_p / 10 ** -12)
             dw_all_neg = lr[pc_layer_idx] * tf.einsum('ij,kj->ikj', xtr_en / 10 ** -12, xtr_p / 10 ** -12)
 
-            dw_mean_pos = tf.reduce_mean(dw_all_pos, axis=2) - 2 * alpha_w[pc_layer_idx] * tf.abs(
-                self.w['pc' + str(pc_layer_idx + 1)])
-            dw_mean_neg = tf.reduce_mean(dw_all_neg, axis=2) - 2 * alpha_w[pc_layer_idx] * tf.abs(
-                self.w['pc' + str(pc_layer_idx + 1)])
+            dw_l1 = tf.cast(tf.greater(self.w['pc' + str(pc_layer_idx + 1)], 0.0), tf.float32)
+            dw_mean_pos = tf.reduce_mean(dw_all_pos, axis=2) - alpha_w[pc_layer_idx] * \
+                          dw_l1
+                          # tf.abs(self.w['pc' + str(pc_layer_idx + 1)])
+            dw_mean_neg = tf.reduce_mean(dw_all_neg, axis=2) - alpha_w[pc_layer_idx] * \
+                          dw_l1
+                          # tf.abs(self.w['pc' + str(pc_layer_idx + 1)])
 
             dws = tf.add(dw_mean_pos, -dw_mean_neg)
 
@@ -336,14 +356,16 @@ class AdEx_Layer(object):
                       bat_size=data_set.shape[0])
 
         input_shape = int(np.sqrt(self.n_stim))
-        input_image = tf.reshape(self.xtr_record[:self.n_stim, :],
-                                 (input_shape, input_shape, data_set.shape[0])) / pamp
+        n_plots = 16
+        sample_size = int(data_set.shape[0]/n_plots)
+        input_image = tf.reshape(self.xtr_record[:self.n_stim, ::n_plots],
+                                 (input_shape, input_shape, sample_size)) / pamp
         reconstructed_image = tf.reshape(
-            self.w['pc1'] @ self.xtr_record[self.n_stim * 3:self.n_stim * 3 + self.n_pred[0], :],
-            (input_shape, input_shape, data_set.shape[0])) / pamp
+            self.w['pc1'] @ self.xtr_record[self.n_stim * 3:self.n_stim * 3 + self.n_pred[0], ::n_plots],
+            (input_shape, input_shape, sample_size)) / pamp
 
-        l1rep_fig = plot_pc1rep(input_image.numpy(), reconstructed_image.numpy(), ndigit, nsample)
-        l1rep_fig.savefig(self.model_dir + '/{0}_nD{1}_nS{2}.png'.format(train_or_test, ndigit, nsample))
+        l1rep_fig = plot_pc1rep(input_image.numpy(), reconstructed_image.numpy(), ndigit, int(sample_size/ndigit))
+        l1rep_fig.savefig(self.model_dir + '/{0}_nD{1}_nS{2}.png'.format(train_or_test, ndigit, int(sample_size/ndigit)))
 
         return l1rep_fig
 
@@ -398,7 +420,7 @@ class AdEx_Layer(object):
                 #                                                                                         len(set_id)) / pamp
 
                 neurons_per_pc = self.neurons_per_group[::3]
-                fig, axs = plt.subplots(ncols=3 * n_pc_layers, nrows=n_class, figsize=(4 * 3 * n_pc_layers, 4 * n_class))
+                fig, axs = plt.subplots(ncols=3 * self.n_pc_layer, nrows=n_class, figsize=(4 * 3 * self.n_pc_layer, 4 * n_class))
                 for pc_i in range(self.n_pc_layer): # for a 3-PC model, 0, 1, 2
                     # plot progres : p1 - p3
                     inp_size = int(np.sqrt(neurons_per_pc[pc_i]))
@@ -415,14 +437,14 @@ class AdEx_Layer(object):
                                                                                                     len(set_id)) / pamp
 
                     for plt_idx in range(len(set_id)):
-                        input_plot = axs[plt_idx, 0 + pc_i * n_pc_layers].imshow(input_img[:, :, plt_idx], cmap='Reds')#, vmin=600, vmax=4000)
-                        fig.colorbar(input_plot, ax=axs[plt_idx, 0 + pc_i * n_pc_layers], shrink=0.6)
-                        reconst_plot = axs[plt_idx, 1 + pc_i * n_pc_layers].imshow(reconst_img[:, :, plt_idx], cmap='Reds')#, vmin=600, vmax=4000)
-                        fig.colorbar(reconst_plot, ax=axs[plt_idx, 1 + pc_i * n_pc_layers], shrink=0.6)
-                        diff_plot = axs[plt_idx, 2 + pc_i * n_pc_layers].imshow(input_img[:, :, plt_idx] - reconst_img[:, :, plt_idx],
+                        input_plot = axs[plt_idx, 0 + pc_i * 3].imshow(input_img[:, :, plt_idx], cmap='Reds', vmin=0, vmax=3000)
+                        fig.colorbar(input_plot, ax=axs[plt_idx, 0 + pc_i * 3], shrink=0.6)
+                        reconst_plot = axs[plt_idx, 1 + pc_i * 3].imshow(reconst_img[:, :, plt_idx], cmap='Reds', vmin=0, vmax=3000)
+                        fig.colorbar(reconst_plot, ax=axs[plt_idx, 1 + pc_i * 3], shrink=0.6)
+                        diff_plot = axs[plt_idx, 2 + pc_i * 3].imshow(input_img[:, :, plt_idx] - reconst_img[:, :, plt_idx],
                                                            cmap='bwr',
                                                            vmin=-1000, vmax=1000)
-                        fig.colorbar(diff_plot, ax=axs[plt_idx, 2 + pc_i * n_pc_layers], shrink=0.6)
+                        fig.colorbar(diff_plot, ax=axs[plt_idx, 2 + pc_i * 3], shrink=0.6)
 
                 [axi.axis('off') for axi in axs.ravel()]
                 fig.suptitle('progress update: epoch #{0}/{1}'.format(epoch_i + 1, num_epoch))
@@ -455,8 +477,6 @@ class AdEx_Layer(object):
             sse_fig.savefig(self.model_dir + '/log_sse.png'.format(epoch_i + 1))
             plt.close(sse_fig)
 
-            self.save_results(epoch_i)
-
             if (epoch_i + 1) % n_plot_idx == 0:
                 # weight dist change
                 w_fig = weight_dist(savefolder=save_folder,
@@ -472,6 +492,8 @@ class AdEx_Layer(object):
                 rdm_fig = rdm_plots(model=adex_01,
                                     testing_current=test_set, n_class=n_class,
                                     savefolder=save_folder, trained="test", epoch_i=epoch_i)
+
+            self.save_results(epoch_i)
 
         end_time = time.time()
         update_sim_time(self.model_dir, '\nsimulation : {0}'.format(str(timedelta(seconds=end_time - start_time))))
@@ -495,6 +517,14 @@ class AdEx_Layer(object):
         # save sse
         with open(self.model_dir + '/sse_dict.pickle', 'wb') as sse_handle:
             pickle.dump(self.sse, sse_handle, protocol=pickle.HIGHEST_PROTOCOL)
+
+    def gist_test(self):
+        gist_rdms = {}
+        gist_rdms['input'] = matrix_rdm(self.xtr_record[:self.n_stim, :].numpy().T)
+        gist_rdms['ig'] = matrix_rdm(self.xtr_record[-self.n_gist:].numpy().T)
+        for pci in range(1, self.n_pc_layer + 1):
+            gist_rdms['gp' + str(pci)] = matrix_rdm(
+                (tf.transpose(self.w['gp' + str(pci)]) @ self.xtr_record[-self.n_gist:]).numpy().T)
 
 def pick_idx(idx_set, digits, size_batch):
 
@@ -629,24 +659,25 @@ if __name__ == "__main__":
         AdEx = pickle.load(f)
 
     # network parameters
-    n_pred_neurons = [169, 144, 100] # preferably each entry is an integer that has an integer square root
+    n_pred_neurons = [30**2, 25**2, 20**2] # preferably each entry is an integer that has an integer square root
     n_pc_layers = len(n_pred_neurons)
-    n_gist = 64
+    n_gist = 100
 
     # create external input
     batch_size = 128
     n_shape = 3
-    n_samples = 128
+    n_samples = 512
 
     # simulate
     sim_dur = 500 * 10 ** (-3)  # ms
     dt = 1 * 10 ** (-4)  # ms
-    learning_window = 100 * 10 ** -3
+    learning_window = 150 * 10 ** -3
     report_index = 1
 
-    n_epoch = 10
-    lrate = np.repeat(1.0, n_pc_layers) * 10 ** -7
-    reg_alpha = np.repeat(1.0, n_pc_layers) * 10 ** -3
+    n_epoch = 100
+    # lrate = np.repeat(1.0, n_pc_layers) * 10 ** -8
+    lrate = np.array([1.0, 0.1, 0.05]) * 10 ** -9
+    reg_alpha = np.repeat(1.0, n_pc_layers) * 10 ** -5
 
     keras_data = tf.keras.datasets.mnist
     training_set, training_labels, test_set, test_labels, classes, training_set_idx = create_mnist_set(data_type=keras_data,
@@ -716,3 +747,4 @@ if __name__ == "__main__":
     # rdm_fig = rdm_plots(model=adex_01,
     #                     testing_current=testing_set, n_class=test_n_shape,
     #                     savefolder=save_folder, trained="test")
+
