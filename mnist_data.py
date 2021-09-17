@@ -2,6 +2,29 @@ import tensorflow as tf
 import numpy as np
 import matplotlib.pyplot as plt
 
+
+pamp = 10 ** -12
+
+def scale_tensor(x, target_min=600 * pamp, target_max=3000 * pamp, custom_range=[None, None]):
+
+    ## RELU
+    x = tf.nn.relu(x)
+
+    ## x is your tensor
+    if custom_range == [None, None]:
+        current_min = tf.reduce_min(x)
+        current_max = tf.reduce_max(x)
+    else:
+        current_min, current_max = custom_range
+
+    ## scale to [0, 1]
+    x = tf.math.divide_no_nan(tf.subtract(x, current_min), tf.subtract(current_max, current_min))
+
+    ## scale to[target_min, target_max]
+    x = tf.add(tf.multiply(x, tf.subtract(target_max, target_min)), target_min)
+
+    return x
+
 def pre_process(data_set, label_set, nDigit, nSample, classes):
 
     training_set = np.zeros((nDigit * nSample, np.multiply(*data_set[0].shape)))
@@ -12,7 +35,9 @@ def pre_process(data_set, label_set, nDigit, nSample, classes):
         rand_ids = np.random.choice(len(digit), nSample)
         curr_digit = digit[rand_ids].reshape(nSample, np.multiply(*data_set[0].shape))
         norm_digits = curr_digit / np.linalg.norm(curr_digit, axis=1).reshape(nSample, 1)
-        training_set[i * nSample:(i + 1) * nSample] = 12000 * norm_digits + 600
+        training_set[i * nSample:(i + 1) * nSample] = norm_digits
+        # training_set[i * nSample:(i + 1) * nSample] = scale_tensor(tf.convert_to_tensor(norm_digits, dtype=tf.float32)).numpy()
+        # training_set[i * nSample:(i + 1) * nSample] = 12000 * norm_digits + 600
 
         training_labels.append(label_set[np.where(label_set == classes[i])][rand_ids])
 
@@ -73,7 +98,7 @@ def plot_mnist_set(testset, testset_idx, nDigit, nSample, savefolder):
             iy = 30 * j + 1
             img[ix:ix + 28, iy:iy + 28] = X[i * nSample + j].reshape((28, 28))
 
-    plt.imshow(img, cmap="Reds", vmin=600e-12, vmax=4000e-12)
+    plt.imshow(img, cmap="Reds")#, vmin=600e-12, vmax=1000e-12)
     plt.xticks([])
     plt.yticks([])
     plt.title('MNIST images: nDigits={0}, nSample={1}'.format(nDigit, nSample))
