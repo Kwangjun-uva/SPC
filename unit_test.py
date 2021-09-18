@@ -76,7 +76,7 @@ def update_var(v, c, ref, x, x_tr, Isyn, fs):
 def update_v(v, constraint):
     dv = (dt / Cm) * (gL * (EL - v) +
                       gL * DeltaT * tf.exp((v - VT) / DeltaT) +
-                      Isyn - c)
+                      (Isyn + 600 * pamp) - c)
     dv_ref = (1 - constraint) * dv
     return tf.add(v, dv_ref)
 
@@ -101,7 +101,7 @@ def update_Isyn(Isyn):
     # I = ext
     Isyn[:n_stim].assign(scale_tensor(Iext, target_max=3000*pamp))
     # Isyn[n_stim:].assign(x_tr[:n_stim] * w_const)
-    Isyn[n_stim:].assign(x_tr[:n_stim] + 600 * pamp)
+    Isyn[n_stim:].assign(x_tr[:n_stim] )
     # Isyn[n_stim:].assign(tf.reshape(w @ tf.reshape((x_tr[:n_stim] * w_const), shape=(n_stim, 1)), shape=(n_pred,)))
 
     return Isyn

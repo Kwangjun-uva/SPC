@@ -176,7 +176,7 @@ class AdEx_Layer(object):
     def update_v(self, constraint):
         dv = (self.dt / self.Cm) * (self.gL * (self.EL - self.v) +
                                     self.gL * self.DeltaT * tf.exp((self.v - self.VT) / self.DeltaT) +
-                                    self.Isyn - self.c)
+                                    (self.Isyn + self.offset) - self.c)
         dv_ref = (1 - constraint) * dv
         self.v = tf.add(self.v, dv_ref)
 
@@ -200,7 +200,7 @@ class AdEx_Layer(object):
             scale_tensor(self.Iext))
         # gist = W[ig]@ Isyn[I]
         input_gist = tf.transpose(self.w['ig']) @ (self.x_tr[:self.neurons_per_group[0]])
-        self.Isyn[-self.n_gist:, :].assign(input_gist + self.offset)
+        self.Isyn[-self.n_gist:, :].assign(input_gist)
 
         for pc_layer_idx in range(self.n_pc_layer):
             self.Isyn_by_layer(pc_layer_idx, wc=tf.cast(tf.greater(self._step - 500, 0), tf.float32))
@@ -223,10 +223,10 @@ class AdEx_Layer(object):
 
         # E+ = I - P
         self.Isyn[curr_p_idx + curr_p_size:curr_p_idx + 2 * curr_p_size, :].assign(
-                tf.add(bu_sensory, -td_pred) + self.offset)
+                tf.add(bu_sensory, -td_pred))
         # E- = -I + P
         self.Isyn[curr_p_idx + 2 * curr_p_size:next_p_idx, :].assign(
-            tf.add(-bu_sensory, td_pred) + self.offset)
+            tf.add(-bu_sensory, td_pred))
 
         # P = bu_error + td_error + gist
         bu_err_pos = tf.transpose(self.w['pc' + str(pc_layer_idx + 1)]) @ (
@@ -243,13 +243,13 @@ class AdEx_Layer(object):
                     tf.add(
                         tf.add(bu_err_pos, -bu_err_neg),
                         tf.add(-td_err_pos, td_err_neg)),
-                    gist) + self.offset)
+                    gist))
         else:
             self.Isyn[next_p_idx:next_p_idx + next_p_size, :].assign(
                 tf.add(
                     tf.add(
                         bu_err_pos, -bu_err_neg),
-                    gist) + self.offset)
+                    gist))
 
     def connect_pc(self):
 

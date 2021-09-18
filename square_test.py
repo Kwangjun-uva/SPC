@@ -58,8 +58,8 @@ def init_var():
 # xxx = tf.Variable(tf.zeros([n_variable, int(T / dt)], dtype=tf.float32))
 # Isyn_s = tf.Variable(tf.zeros([n_variable, int(T / dt)], dtype=tf.float32))
 
-offset = 600 * pamp
-# offset = 0
+# offset = 600 * pamp
+offset = 0
 
 def update_var(v, c, ref, x, x_tr, Isyn, fired, w):
     # feed synaptic current to higher layers
