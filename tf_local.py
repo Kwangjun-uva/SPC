@@ -296,7 +296,7 @@ class AdEx_Layer(object):
 
         elif self._step > int(self.T / self.dt) - int(self.l_time / self.dt):
 
-            self.xtr_record.assign_add(self.x_tr + self.offset)
+            self.xtr_record.assign_add(self.x_tr)# + self.offset)
 
     def weight_update(self, lr, alpha_w):
 
@@ -636,14 +636,14 @@ if __name__ == "__main__":
         AdEx['x_reset'] = 400 * 10 ** (-12)
 
     # network parameters
-    n_pred_neurons = [15**2, 10**2, 8**2] # preferably each entry is an integer that has an integer square root
+    n_pred_neurons = [30**2, 25**2, 20**2] # preferably each entry is an integer that has an integer square root
     n_pc_layers = len(n_pred_neurons)
-    n_gist = 64
+    n_gist = 100
 
     # create external input
-    batch_size = 128
+    batch_size = 512
     n_shape = 3
-    n_samples = 256
+    n_samples = 512
 
     # simulate
     sim_dur = 500 * 10 ** (-3)  # ms
@@ -651,10 +651,10 @@ if __name__ == "__main__":
     learning_window = 150 * 10 ** -3
     report_index = 1
 
-    n_epoch = 10
+    n_epoch = 300
     # lrate = np.repeat(1.0, n_pc_layers) * 10 ** -8
-    lrate = np.array([1.0, 0.1, 0.05]) * 10 ** -8
-    reg_alpha = np.repeat(1.0, n_pc_layers) * 10 ** -5
+    lrate = np.array([1.0, 0.5, 0.25]) * 10 ** -9
+    reg_alpha = np.repeat(1.0, n_pc_layers) * 10 ** -4
 
     keras_data = tf.keras.datasets.mnist
     training_set, training_labels, test_set, test_labels, classes, training_set_idx = create_mnist_set(data_type=keras_data,
