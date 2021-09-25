@@ -650,44 +650,46 @@ gpus = tf.config.experimental.list_logical_devices('GPU')
 gpu_i = int(sys.argv[2])
 # gpu_i = 0
 
-with tf.device(gpus[gpu_i].name):
+if __name__ == "__main__":
 
-    # create a folder to save results
-    save_folder = 'gpu' + str(gpu_i+1) + '_nD' + str(n_shape) + 'nS' + str(n_samples) + 'nEP' + str(n_epoch)
-    if os.path.exists(save_folder):
-        save_folder += datetime.today().strftime('_%Y_%m_%d_%H_%M')
-    os.mkdir(save_folder)
+    with tf.device(gpus[gpu_i].name):
 
-    save_data(save_folder)
+        # create a folder to save results
+        save_folder = 'gpu' + str(gpu_i+1) + '_nD' + str(n_shape) + 'nS' + str(n_samples) + 'nEP' + str(n_epoch)
+        if os.path.exists(save_folder):
+            save_folder += datetime.today().strftime('_%Y_%m_%d_%H_%M')
+        os.mkdir(save_folder)
 
-    # print how many GPUs
-    update_sim_time(save_folder, "Num GPUs Available: {0}\n".format(tf.config.list_physical_devices('GPU')))
+        save_data(save_folder)
 
-    # identify current GPU
-    update_sim_time(save_folder, "currently running on " + gpus[gpu_i].name + '\n')
+        # print how many GPUs
+        update_sim_time(save_folder, "Num GPUs Available: {0}\n".format(tf.config.list_physical_devices('GPU')))
 
-    # plot the same test set
-    plot_mnist_set(testset=training_set, testset_idx=training_set_idx,
-                   nDigit=n_shape, nSample=n_samples,
-                   savefolder=save_folder)
+        # identify current GPU
+        update_sim_time(save_folder, "currently running on " + gpus[gpu_i].name + '\n')
 
-    # build network
-    adex_01 = AdEx_Layer(sim_directory=save_folder,
-                         neuron_model_constants=AdEx,
-                         num_pc_layers=n_pc_layers,
-                         num_pred_neurons=n_pred_neurons,
-                         num_stim=n_stim,
-                         gist_num=n_gist, gist_connp=conn_vals, gist_maxw=max_vals)
+        # plot the same test set
+        plot_mnist_set(testset=training_set, testset_idx=training_set_idx,
+                       nDigit=n_shape, nSample=n_samples,
+                       savefolder=save_folder)
+
+        # build network
+        adex_01 = AdEx_Layer(sim_directory=save_folder,
+                             neuron_model_constants=AdEx,
+                             num_pc_layers=n_pc_layers,
+                             num_pred_neurons=n_pred_neurons,
+                             num_stim=n_stim,
+                             gist_num=n_gist, gist_connp=conn_vals, gist_maxw=max_vals)
 
 
-    # train_network(self, num_epoch, sim_dur, sim_dt, sim_lt, lr, reg_a, input_current, n_shape, n_batch, set_idx):
-    sse = adex_01.train_network(num_epoch=n_epoch,
-                                simul_dur=sim_dur, sim_dt=dt, sim_lt=learning_window,
-                                lr=lrate, reg_a=reg_alpha,
-                                input_current=training_set.T,
-                                test_set=testing_set, test_n_sample=test_n_sample,
-                                n_class=n_shape, batch_size=batch_size,
-                                set_idx=rep_set_idx, report_idx=report_index, n_plot_idx=n_plot_idx)
+        # train_network(self, num_epoch, sim_dur, sim_dt, sim_lt, lr, reg_a, input_current, n_shape, n_batch, set_idx):
+        sse = adex_01.train_network(num_epoch=n_epoch,
+                                    simul_dur=sim_dur, sim_dt=dt, sim_lt=learning_window,
+                                    lr=lrate, reg_a=reg_alpha,
+                                    input_current=training_set.T,
+                                    test_set=testing_set, test_n_sample=test_n_sample,
+                                    n_class=n_shape, batch_size=batch_size,
+                                    set_idx=rep_set_idx, report_idx=report_index, n_plot_idx=n_plot_idx)
 
     # # save simulation data
     # save_data(save_folder)

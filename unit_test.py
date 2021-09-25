@@ -5,7 +5,7 @@ import pickle5 as pickle
 from AdEx_const import *
 from mnist_data import create_mnist_set, scale_tensor
 
-I_ext = np.arange(600, 3030, 30) * 10 ** -12
+I_ext = np.arange(0, 5100, 100) * pamp
 # I_ext = np.random.normal(loc=1000, scale=500, size=100) * 10 ** -12
 n_stim = len(I_ext)
 n_pred = len(I_ext)
@@ -13,14 +13,12 @@ n_pred = len(I_ext)
 n_variable = n_stim + n_pred
 
 # simulation parameters
-T = 500 * 10 ** -3
+T = 350 * 10 ** -3
 dt = 1 * 10 ** -4
 
 # synapse parameters
-# w = tf.random.normal(shape=(200, 100), mean=1.0, stddev=0.5, dtype=tf.float32)
-# w_clamp = tf.cast(tf.greater(w, 0), tf.float32)
-# w = w * w_clamp
-w_const = 1 * 10 ** -12
+# x_reset = 400 * 10 ** (-12)
+# offset = 600 * 10 ** (-12)
 
 # internal variables
 v = tf.Variable(tf.ones([n_variable, ], dtype=tf.float32) * EL)
@@ -76,7 +74,7 @@ def update_var(v, c, ref, x, x_tr, Isyn, fs):
 def update_v(v, constraint):
     dv = (dt / Cm) * (gL * (EL - v) +
                       gL * DeltaT * tf.exp((v - VT) / DeltaT) +
-                      (Isyn + 600 * pamp) - c)
+                      (Isyn + offset) - c)
     dv_ref = (1 - constraint) * dv
     return tf.add(v, dv_ref)
 
@@ -99,9 +97,9 @@ def update_xtr(x_tr):
 
 def update_Isyn(Isyn):
     # I = ext
-    Isyn[:n_stim].assign(scale_tensor(Iext, target_max=3000*pamp))
+    Isyn[:n_stim].assign(Iext)
     # Isyn[n_stim:].assign(x_tr[:n_stim] * w_const)
-    Isyn[n_stim:].assign(x_tr[:n_stim] )
+    Isyn[n_stim:].assign(x_tr[:n_stim])
     # Isyn[n_stim:].assign(tf.reshape(w @ tf.reshape((x_tr[:n_stim] * w_const), shape=(n_stim, 1)), shape=(n_pred,)))
 
     return Isyn
@@ -110,14 +108,18 @@ for t in range(int(T / dt)):
     # update internal variables (v, c, x, x_tr)
     v, c, ref, x, x_tr, Isyn, fs = update_var(v, c, ref, x, x_tr, Isyn, fired)
     xtr_s[:, t].assign(x_tr)
-    xxx[:, t].assign(x)
+    # xxx[:, t].assign(x)
     Isyn_s[:, t].assign(Isyn)
 
+avg_time = int(100e-3 * 1/dt)
 plt.figure()
 plt.subplot(121)
-plt.scatter(I_ext/pamp, Isyn_s[:n_stim, -2000:].numpy().mean(axis=1)/pamp)
+plt.scatter(I_ext/pamp, Isyn_s[n_stim:, -avg_time:].numpy().mean(axis=1)/pamp, label='post_input')
+plt.scatter(I_ext/pamp, xtr_s[:n_stim, -avg_time:].numpy().mean(axis=1)/pamp, c='g', label='pre_output')
+plt.plot(I_ext/pamp, I_ext/pamp, c='r', ls='--')
 plt.xlabel('input current to pre-syn neuron (pamp)')
 plt.ylabel('current at post-syn terminal (pamp)')
+plt.legend()
 
 plt.subplot(122)
 plt.scatter(I_ext/pamp, fs[:n_stim].numpy())
@@ -125,9 +127,11 @@ plt.xlabel('input current to pre-syn neuron (pamp)')
 plt.ylabel('firing rate of pre-syn neuron (Hz)')
 plt.show()
 
+x_idx = 22
 plt.figure()
-plt.plot(xxx[22]/pamp)
-plt.plot(xtr_s[22]/pamp, c='r', label='input={0:.2f}\nmean={1:.2f}'.format(I_ext[22]/pamp, xtr_s[22, -2000:].numpy().mean()/pamp))
+# plt.plot(xxx[x_idx]/pamp)
+plt.plot(Isyn_s[x_idx + n_stim]/pamp, c='b', label='post_input={0:.2f}'.format(Isyn_s[x_idx + n_stim, -avg_time:].numpy().mean()/pamp))
+plt.plot(xtr_s[x_idx]/pamp, c='r', label='pre_input={0:.2f}\npre_output={1:.2f}'.format(I_ext[x_idx]/pamp, xtr_s[x_idx, -avg_time:].numpy().mean()/pamp))
 plt.legend()
 plt.show()
 

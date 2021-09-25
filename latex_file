@@ -1,0 +1,151 @@
+
+\documentclass{article} % For LaTeX2e
+\usepackage{iclr2022_conference,times}
+
+% Optional math commands from https://github.com/goodfeli/dlbook_notation.
+\input{math_commands.tex}
+
+\usepackage{hyperref}
+\usepackage{url}
+\usepackage{graphicx}
+\graphicspath{ {./figures/} }
+
+\title{Spiking Neural Network for Predictive Coding \\ Conference Submissions}
+
+% Authors must not appear in the submitted version. They should be hidden
+% as long as the \iclrfinalcopy macro remains commented out below.
+% Non-anonymous submissions will be rejected without review.
+
+\author{Kwangjun Lee
+        \thanks{Universiteit van Amsterdam}
+        \\ \texttt{\{k,lee\}@uva.nl} \\
+
+        \And
+        Shirin Dora
+        \thanks{Loughborough Univesity}
+        \\ \texttt{\{s,dora\}@lboro.ac.uk} \\
+
+        \And
+        Jorge F. Mejias
+        \footnotemark[1]
+        \\ \texttt{\{jf,mejias\}@uva.nl} \\
+
+        \And
+        Cyriel M.A. Pennartz
+        \footnotemark[1]
+        \\ \texttt{\{c,m,a,pennartz\}@uva.nl} \\
+
+        \And
+        Sander M. Bohte
+        \thanks{Cetnrum Wiskunde \& Informatica}
+        \textsuperscript{ ,}
+        \footnotemark[1]
+        \\ \texttt{\{s,m,bohte\}@cwi.nl} \\
+
+        }
+%  Shirin Dora, Cyriel M.A. Pennartz, Sander M. Bohte
+
+% The \author macro works with any number of authors. There are two commands
+% used to separate the names and addresses of multiple authors: \And and \AND.
+%
+% Using \And between authors leaves it to \LaTeX{} to determine where to break
+% the lines. Using \AND forces a linebreak at that point. So, if \LaTeX{}
+% puts 3 of 4 authors names on the first line, and the last on the second
+% line, try using \AND instead of \And before the third author name.
+
+\newcommand{\fix}{\marginpar{FIX}}
+\newcommand{\new}{\marginpar{NEW}}
+
+\iclrfinalcopy % Uncomment for camera-ready version, but NOT for submission.
+\begin{document}
+
+
+\maketitle
+\begin{abstract}
+The abstract paragraph should be indented 1/2~inch (3~picas) on both left and
+right-hand margins. Use 10~point type, with a vertical spacing of 11~points.
+The word \textsc{Abstract} must be centered, in small caps, and in point size 12. Two
+line spaces precede the abstract. The abstract must be limited to one
+paragraph.
+\end{abstract}
+
+\section{Introduction}
+    Q: How to efficiently implement local learning rules for neuromorphic computing?
+    \\A: SNN-PC
+
+    \subsection{How to achieve spatial and temporal credit assignment using local learning rule in SNN
+        }
+    \subsection{Gap in the literature}
+            b1. SNN for PC \\
+            b2. Nature of prior (random, sample-/class-speicifc)
+                => Feedforard gist-like baseline activities / prior
+    \subsection{summary}
+        How to build a generatvie model (SNN-PC) using a spiking neuron model and Hebbian learning rule, which is neurobiologically grounded and has the capacity to perform classification on visual stimulus dataset.
+
+\section{Related Work}
+
+    \citet{Rao99} \\
+    \citet{Dora21} \\
+    \citet{Whittington17} \\
+    \citet{Bellec20} \\
+
+\section{Method}
+    \subsection{PC architecture}
+        Neurons behave according to the adaptive exponential leaky-and-integrate fire (AdEx-LIF) model \citep{Brette09}. \\
+
+        \\Basic hierarchical PC architecture from \citet{Rao99} and \citet{Dora21} \\
+
+        \begin{figure}[h]
+        \begin{center}
+        \includegraphics[width=14cm, height=9cm]{iclr2022/figures/fig_pc_arch.png}
+        \end{center}
+        \caption{Spiking neural network for predictive coding (SNN- PC). (a) General architecture of SNN-PC. Each PC layer consists of a prediction unit and two error computing units, one of which computes positive and the other negative residual errors between prediction and actual synaptic current (i.e., prediction error). Between PC layers, feedback connections carry predictions about neural activity to the lower layer, whereas feedforward connections propagate prediction error. (b) Synaptic profile. Intra-layer connections are one-to-one, whereas inter-layer connections are fully connected. (c) Feedforward gist connection. A fast feedforward sweep of sparse random connections from input to prediction units generates a spatially reduced, abstract representation of input stimulus that serves as a prior.}
+        \end{figure}
+
+        \\Separation of two error-computing neurons to propagate negative errors.
+
+    \subsection{Feedforward gist network}
+        A fast-forward sweep of sparse random projections from input to higher areas generates a sparse and spatially reduced, abstract representation of input. Only the gist connections are active for the first 50 ms of simulation to provide baseline activities to each area, based on which the PC hierarchy infers the cause of incoming sensory signals via prediction error minimization. Hence, we circumvent the need to feed and update the network with arbitrarily chosen prior activities and establishing a more biologically plausible mechanism that models a function of the feedforward visual pathway.
+
+    \subsection{Learning}
+        Rate-based Hebbian learning between pre- and post-synaptic mean synaptic currents
+
+    \subsection{Training and testing}
+        Simulation parameters (simulation duration, learning rate, learning timestep, nBatch, nEpoch) \\
+        \\Small ordered MNIST dataset (nSamples, nDigits) \\
+
+\section{Experiment}
+    \subsection{generative model}
+    \begin{figure}[h]
+        \begin{center}
+        \includegraphics[width=14cm, height=5cm]{iclr2022/figures/fig_reconst_latentrep.png}
+        \end{center}
+        \caption{SNN-PC performance. (a) Reconstruction of novel images. (b) Representational similarity analysis on the latent representations among image samples. From left to right: representational dissimilarity matrices for a subset of MNIST dataset (I), latent representations across the PC hierarchy (Area 1–3), and an ideal classifier (T). The dissimilarity measure is (1 – correlation).}
+        \end{figure}
+
+    \subsection{benchmark comparison on classification performance}
+    \subsection{computational efficiency analysis}
+        i. sparseness (i.e., spike numbers) : capped around 80 Hz \\
+        ii. minimal inference duration : currently 350 ms \citep{Diehl15} \\
+        iii. simulation time (i.e., run time) : a batch of 1024 samples takes 30 sec\\
+
+\section{Conclusion}
+\subsection{Biological plausibility}
+\subsection{Incompatibility with the current computer architecture}
+\subsubsection*{Author Contributions}
+If you'd like to, you may include  a section for author contributions as is done
+in many journals. This is optional and at the discretion of the authors.
+
+\subsubsection*{Acknowledgments}
+Use unnumbered third level headings for the acknowledgments. All
+acknowledgments, including those to funding agencies, go at the end of the paper.
+
+
+\bibliography{iclr2022_conference}
+\bibliographystyle{iclr2022_conference}
+
+\appendix
+\section{Appendix}
+You may include other additional sections here.
+
+\end{document}

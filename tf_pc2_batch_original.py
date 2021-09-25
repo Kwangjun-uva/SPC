@@ -407,10 +407,10 @@ def train_network(model, num_epoch, lr, reg_a, input_current):
         print('***** time remaining = {0}'.format(
             str(timedelta(seconds=epoch_time_avg / (epoch_i + 1) * (num_epoch - epoch_i - 1)))))
 
-        input_image = tf.reshape(model.xtr_record[:n_stim, :], (sqrt_nstim, sqrt_nstim, model.batch_size)) / pamp
+        input_image = tf.reshape(model.xtr_record[:n_stim, :], (sqrt_nstim, sqrt_nstim, model.n_sample)) / pamp
         reconstructed_image = tf.reshape(
             tf.transpose(model.w[n_stim * 3:, n_stim * 2:n_stim * 3]) @ model.xtr_record[n_stim * 3:, :],
-            (sqrt_nstim, sqrt_nstim, model.batch_size)) / pamp
+            (sqrt_nstim, sqrt_nstim, model.n_sample)) / pamp
 
         sse.append(tf.reduce_sum(tf.reduce_mean(reconstructed_image - input_image, axis=2) ** 2).numpy())
 

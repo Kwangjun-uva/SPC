@@ -1,3 +1,4 @@
+from AdEx_const import *
 import numpy as np
 import tensorflow as tf
 import matplotlib.pyplot as plt
@@ -21,7 +22,7 @@ def update_sim_time(folder, print_line):
     sim_time_txt.write(print_line)
 
 def new_init(self, sim_directory,
-             neuron_model_constants,
+             # neuron_model_constants,
              num_pc_layers, num_pred_neurons, num_stim, gist_num,
              w_mat, w_mat_init):
 
@@ -36,9 +37,6 @@ def new_init(self, sim_directory,
         """
 
         self.model_dir = sim_directory
-
-        for key in neuron_model_constants:
-            setattr(self, key, neuron_model_constants[key])
 
         # network architecture
         self.n_pc_layer = num_pc_layers
@@ -56,7 +54,6 @@ def new_init(self, sim_directory,
         self.w_init = w_mat_init
 
         # constant weight
-        self.w_const = 550 * 10 ** -12
         # weight update time interval
         self.l_time = None
 
@@ -69,6 +66,8 @@ def new_train(self,
                   n_class, batch_size,
                   set_idx,
                   report_idx, n_plot_idx):
+
+    plt.close('all')
 
     # starting idx for progress update
     prg_start_idx = latest_epoch(save_folder)
@@ -134,10 +133,10 @@ def new_train(self,
 
                 for plt_idx in range(len(set_id)):
                     input_plot = axs[plt_idx, 0 + pc_i * 3].imshow(input_img[:, :, plt_idx],
-                                                                             cmap='Reds', vmin=0, vmax=3000)
+                                                                             cmap='Reds', vmin=1000, vmax=3000)
                     fig.colorbar(input_plot, ax=axs[plt_idx, 0 + pc_i * 3], shrink=0.6)
                     reconst_plot = axs[plt_idx, 1 + pc_i * 3].imshow(reconst_img[:, :, plt_idx],
-                                                                               cmap='Reds', vmin=0, vmax=3000)
+                                                                               cmap='Reds', vmin=1000, vmax=3000)
                     fig.colorbar(reconst_plot, ax=axs[plt_idx, 1 + pc_i * 3], shrink=0.6)
                     diff_plot = axs[plt_idx, 2 + pc_i * 3].imshow(
                         input_img[:, :, plt_idx] - reconst_img[:, :, plt_idx],
@@ -183,14 +182,14 @@ def new_train(self,
                                 weights=self.w, weights_init=self.w_init,
                                 n_pc=self.n_pc_layer, epoch_i=epoch_i + prg_start_idx)
 
-            test_fig = self.test_inference(imgs=test_set,
+            test_fig = self.test_inference(imgs=testing_set,
                                               nsample=test_n_sample, ndigit=n_class,
                                               simul_dur=simul_dur, sim_dt=sim_dt, sim_lt=sim_lt,
                                               train_or_test='test')
 
             # rdm analysis
             rdm_fig = rdm_plots(model=adex_01,
-                                testing_current=test_set, n_class=n_class,
+                                testing_current=testing_set, n_class=n_class,
                                 savefolder=self.model_dir, trained="test", epoch_i=epoch_i + prg_start_idx)
 
             self.save_results(epoch_i + prg_start_idx)
@@ -203,12 +202,12 @@ def new_train(self,
 AdEx_Layer.__init__ = new_init
 AdEx_Layer.train_network = new_train
 
-# load constants
-with open('adex_constants.pickle', 'rb') as f:
-    AdEx = pickle.load(f)
+# # load constants
+# with open('adex_constants.pickle', 'rb') as f:
+#     AdEx = pickle.load(f)
 
 # specify the folder
-save_folder = '2021_09_02_16_04_nD3nS128nEP10'
+save_folder = '2021_09_21_18_17_nD3nS512nEP100'
 
 # load sse from previous training
 with open(save_folder + '/sse_dict.pickle', 'rb') as sse_handle:
@@ -240,11 +239,8 @@ with open(save_folder + '/weight_init_dict.pickle', 'rb') as wdict:
 for key, grp in w_mat_init.items():
     w_mat_init[key] = tf.convert_to_tensor(grp)
 
-# unit
-pamp = 10 ** -12
-
 # not necessary from next training
-n_epoch = 10
+n_epoch = 50
 
 # training_set, training_labels, test_set, test_labels, digits, training_set_idx
 training_set = np.load(save_folder + '/training_data.npy')
@@ -255,7 +251,7 @@ sqrt_nstim = int(np.sqrt(n_stim))
 
 # test inference on test data
 test_n_shape = n_shape
-test_n_sample = n_samples
+test_n_sample = 16
 test_iter_idx = int(n_samples/test_n_sample)
 
 testing_set = test_set[::test_iter_idx]
@@ -264,19 +260,33 @@ testing_set = test_set[::test_iter_idx]
 # gpu_i = int(sys.argv[3])
 # gpu_i = 0
 
+lrate = np.repeat(1.0, n_pc_layers) * 10 ** -10
 # build network
 adex_01 = AdEx_Layer(sim_directory=save_folder,
-                     neuron_model_constants=AdEx,
+                     # neuron_model_constants=AdEx,
                      num_pc_layers=n_pc_layers,
                      num_pred_neurons=n_pred_neurons,
                      num_stim=n_stim,
                      gist_num=n_gist, w_mat=w_mat, w_mat_init=w_mat_init)
+# def new_init(self, sim_directory,
+#              # neuron_model_constants,
+#              num_pc_layers, num_pred_neurons, num_stim, gist_num,
+#              w_mat, w_mat_init):
+
 
 # train_network(self, num_epoch, sim_dur, sim_dt, sim_lt, lr, reg_a, input_current, n_shape, n_batch, set_idx):
 sse = adex_01.train_network(num_epoch=n_epoch,
                             simul_dur=sim_dur, sim_dt=dt, sim_lt=learning_window,
                             lr=lrate, reg_a=reg_alpha,
                             input_current=training_set.T,
-                            test_set=testing_set, test_n_sample=test_n_sample,
+                            test_set=test_set, test_n_sample=16,
                             n_class=n_shape, batch_size=batch_size,
                             set_idx=rep_set_idx, report_idx=report_index, n_plot_idx=n_plot_idx)
+
+# num_epoch, simul_dur, sim_dt, sim_lt,
+#                   lr, reg_a,
+#                   input_current,
+#                   test_set, test_n_sample,
+#                   n_class, batch_size,
+#                   set_idx,
+#                   report_idx, n_plot_idx):

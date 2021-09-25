@@ -5,7 +5,7 @@ import matplotlib.pyplot as plt
 
 pamp = 10 ** -12
 
-def scale_tensor(x, target_min=600 * pamp, target_max=3000 * pamp, custom_range=[None, None]):
+def scale_tensor(x, target_min=600 * pamp, target_max=2000 * pamp, custom_range=[None, None]):
 
     ## RELU
     x = tf.nn.relu(x)
@@ -27,6 +27,10 @@ def scale_tensor(x, target_min=600 * pamp, target_max=3000 * pamp, custom_range=
 
 def pre_process(data_set, label_set, nDigit, nSample, classes):
 
+    target_max = 3000 * pamp
+    target_min = 600 * pamp
+    target_diff = target_max - target_min
+
     training_set = np.zeros((nDigit * nSample, np.multiply(*data_set[0].shape)))
     training_labels = []
 
@@ -35,9 +39,15 @@ def pre_process(data_set, label_set, nDigit, nSample, classes):
         rand_ids = np.random.choice(len(digit), nSample)
         curr_digit = digit[rand_ids].reshape(nSample, np.multiply(*data_set[0].shape))
         norm_digits = curr_digit / np.linalg.norm(curr_digit, axis=1).reshape(nSample, 1)
-        training_set[i * nSample:(i + 1) * nSample] = norm_digits
+
+        div_a = norm_digits - np.min(norm_digits)
+        div_b = np.max(norm_digits) - np.min(norm_digits)
+        scale_01_set = np.divide(div_a, div_b, out=np.zeros_like(div_a), where=div_b != 0)
+        training_set[i * nSample:(i + 1) * nSample] = scale_01_set * target_diff + target_min
+
+        # training_set[i * nSample:(i + 1) * nSample] = norm_digits
         # training_set[i * nSample:(i + 1) * nSample] = scale_tensor(tf.convert_to_tensor(norm_digits, dtype=tf.float32)).numpy()
-        # training_set[i * nSample:(i + 1) * nSample] = 12000 * norm_digits + 600
+        # training_set[i * nSample:(i + 1) * nSample] = (12000 * norm_digits + 600) * pamp
 
         training_labels.append(label_set[np.where(label_set == classes[i])][rand_ids])
 
@@ -98,7 +108,7 @@ def plot_mnist_set(testset, testset_idx, nDigit, nSample, savefolder):
             iy = 30 * j + 1
             img[ix:ix + 28, iy:iy + 28] = X[i * nSample + j].reshape((28, 28))
 
-    plt.imshow(img, cmap="Reds")#, vmin=600e-12, vmax=1000e-12)
+    plt.imshow(img, cmap="Reds", vmin=1000e-12, vmax=3000e-12)
     plt.xticks([])
     plt.yticks([])
     plt.title('MNIST images: nDigits={0}, nSample={1}'.format(nDigit, nSample))

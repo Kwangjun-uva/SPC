@@ -3,40 +3,44 @@ import tensorflow as tf
 import matplotlib.pyplot as plt
 # import pickle5 as pickle
 from AdEx_const import *
-from mnist_data import create_mnist_set, scale_tensor
+from mnist_data import create_mnist_set
 from create_33images import *
 
-shapes = create_shapes(base_mean=2000 * pamp,
-                       noise_var=500 * pamp,
-                       n_imgs_per_shape=10)
+# shapes = create_shapes(base_mean=1500 * pamp,
+#                        noise_var=500 * pamp,
+#                        n_imgs_per_shape=10)
 
-batch_size = 40
-I_ext = shapes.reshape(shapes.shape[0], np.product([*shapes.shape[1:]])).T
-# I_ext = np.tile(shapes[0].ravel(), batch_size).reshape(batch_size, np.product([*shapes[0].shape])).T
+n_sample = 64
+n_digit = 3
+training_set, training_labels, test_set, test_labels, digits, training_set_idx = create_mnist_set(
+    data_type=tf.keras.datasets.mnist,
+    nSample=n_sample, nDigit=n_digit)
+batch_size = n_sample * n_digit
 
-# n_stim = len(I_ext)
-n_stim = np.product([*shapes.shape[1:]])
+Iext = training_set.T
+
+n_stim = Iext.shape[0]
 n_err = n_stim
-n_pred = [100, 64]
+n_pred = [900, 625]
 n_pc_layer = len(n_pred)
-neurons_per_group = [n_stim] * 3 + [n_pred[0]] * 3 + [n_pred[1]]
+neurons_per_group = [n_stim] * 3 + [n_pred[i] for i in range(len(n_pred) - 1)] * 3 + [n_pred[-1]]
 n_variable = sum(neurons_per_group)
 
 # simulation parameters
 T = 350 * 10 ** -3
 dt = 1 * 10 ** -4
+lt = 100 * 10 ** -3
 
 # synapse parameters
-# w_init = np.random.normal(loc=0.05, scale=0.01, size=(n_err, n_pred))
-# w = tf.constant(np.copy(w_init), dtype=tf.float32)
-w_init = {'pc1': np.abs(np.random.normal(loc=0.05, scale=0.1, size=(n_err, n_pred[0]))),
-          'pc2': np.abs(np.random.normal(loc=0.05, scale=0.1, size=(n_pred[0], n_pred[1])))}
+w_init = {}
+for pc_i in range(n_pc_layer):
+    w_init['pc' + str(pc_i + 1)] = np.abs(np.random.normal(loc=0.0, scale=0.025,
+                                                    size=(neurons_per_group[3 * pc_i], neurons_per_group[3 * pc_i + 3])))
+
 w = {}
 for key, grp in w_init.items():
     w[key] = tf.constant(np.copy(grp), dtype=tf.float32)
 
-# feed external corrent to the first layer
-Iext = scale_tensor(tf.constant(I_ext, dtype=tf.float32))
 
 def init_var():
     # internal variables
@@ -51,15 +55,14 @@ def init_var():
     Isyn = tf.Variable(tf.zeros([n_variable, batch_size], dtype=tf.float32))
     fired = tf.Variable(tf.zeros([n_variable, batch_size], dtype=tf.float32))
 
-    return v,c,ref,x,x_tr,Isyn,fired
+    return v, c, ref, x, x_tr, Isyn, fired
+
 
 # fs = tf.Variable(tf.zeros([n_variable, ], dtype=tf.float32))
 # xtr_s = tf.Variable(tf.zeros([n_variable, int(T / dt)], dtype=tf.float32))
 # xxx = tf.Variable(tf.zeros([n_variable, int(T / dt)], dtype=tf.float32))
-# Isyn_s = tf.Variable(tf.zeros([n_variable, int(T / dt)], dtype=tf.float32))
+# Isyn_s = tf.Variable(tf.zeros([n_variable, batch_size], dtype=tf.float32))
 
-# offset = 600 * pamp
-# offset = 0
 
 def update_var(v, c, ref, x, x_tr, Isyn, fired, w):
     # feed synaptic current to higher layers
@@ -140,10 +143,10 @@ def update_Isyn(Isyn, w):
 
         # E+ = I - P
         Isyn[curr_p_idx + curr_p_size:curr_p_idx + 2 * curr_p_size, :].assign(
-                tf.add(bu_sensory, -td_pred) + 600*pamp)
+            tf.add(bu_sensory, -td_pred))
         # E- = -I + P
         Isyn[curr_p_idx + 2 * curr_p_size:next_p_idx, :].assign(
-            tf.add(-bu_sensory, td_pred) + 600*pamp)
+            tf.add(-bu_sensory, td_pred))
 
         # P = bu_error + td_error + gist
         bu_err_pos = tf.transpose(w['pc' + str(pc_layer_idx + 1)]) @ \
@@ -156,27 +159,25 @@ def update_Isyn(Isyn, w):
             td_err_pos = x_tr[next_p_idx + next_p_size:next_p_idx + 2 * next_p_size]
             td_err_neg = x_tr[next_p_idx + 2 * next_p_size:next_p_idx + 3 * next_p_size]
             Isyn[next_p_idx:next_p_idx + next_p_size, :].assign(
-                    tf.add(
-                        tf.add(bu_err_pos, -bu_err_neg),
-                        tf.add(-td_err_pos, td_err_neg)
-                    ) #+ 600*pamp
+                tf.add(
+                    tf.add(bu_err_pos, -bu_err_neg),
+                    tf.add(-td_err_pos, td_err_neg)
                 )
-                    # gist))
+            )
+            # gist))
         else:
             Isyn[next_p_idx:next_p_idx + next_p_size, :].assign(
-                    tf.add(
-                        bu_err_pos, -bu_err_neg) #+ 600*pamp
-                )
-                    # gist))
+                tf.add(
+                    bu_err_pos, -bu_err_neg)
+            )
+            # gist))
 
     return Isyn
 
 def weight_update(w, lr, alpha_w):
-
     new_w = {}
 
     for pc_layer_idx in range(n_pc_layer):
-
         err_idx = sum(neurons_per_group[:pc_layer_idx * 3 + 1])
         err_size = neurons_per_group[pc_layer_idx * 3 + 1]
         pred_idx = sum(neurons_per_group[:pc_layer_idx * 3 + 3])
@@ -186,71 +187,82 @@ def weight_update(w, lr, alpha_w):
         xtr_en = x_tr_records[err_idx + err_size: err_idx + 2 * err_size]
         xtr_p = x_tr_records[pred_idx: pred_idx + pred_size]
 
-        dw_all_pos = lr * tf.einsum('ij,kj->ikj', xtr_ep / pamp, xtr_p / pamp)
-        dw_all_neg = lr * tf.einsum('ij,kj->ikj', xtr_en / pamp, xtr_p / pamp)
+        dw_all_pos = lr[pc_layer_idx] * tf.einsum('ij,kj->ikj', xtr_ep / pamp, xtr_p / pamp)
+        dw_all_neg = lr[pc_layer_idx] * tf.einsum('ij,kj->ikj', xtr_en / pamp, xtr_p / pamp)
 
-        dw_l1 = tf.cast(tf.greater(w['pc'+str(pc_layer_idx + 1)], 0.0), tf.float32)
+        dw_l1 = tf.cast(tf.greater(w['pc' + str(pc_layer_idx + 1)], 0.0), tf.float32)
         dw_mean_pos = tf.reduce_mean(dw_all_pos, axis=2) - alpha_w * dw_l1
         dw_mean_neg = tf.reduce_mean(dw_all_neg, axis=2) - alpha_w * dw_l1
 
         dws = tf.add(dw_mean_pos, -dw_mean_neg)
-        new_w['pc'+str(pc_layer_idx + 1)] = tf.nn.relu(tf.add(w['pc'+str(pc_layer_idx + 1)], dws))
+        new_w['pc' + str(pc_layer_idx + 1)] = tf.nn.relu(tf.add(w['pc' + str(pc_layer_idx + 1)], dws))
 
     return new_w
 
-n_epoch = 20
-sse = {'pc1':[], 'pc2':[]}
+nsqrt = np.sqrt(np.array([n_stim] + n_pred)).astype(int)
+
+n_epoch = 30
+lr = [1e-7, 5e-8]
+sse = {'pc1': [], 'pc2': []}
 for i_epoch in range(n_epoch):
-    print ('epoch #{0}/{1}'.format(i_epoch+1, n_epoch))
+    print('epoch #{0}/{1}'.format(i_epoch + 1, n_epoch))
 
-    v,c,ref,x,x_tr,Isyn,fired = init_var()
+    v, c, ref, x, x_tr, Isyn, fired = init_var()
     x_tr_records = tf.Variable(tf.zeros([n_variable, batch_size], dtype=tf.float32))
-
+    Isyn_s = tf.Variable(tf.zeros([n_variable, batch_size], dtype=tf.float32))
     for t in range(int(T / dt)):
         # update internal variables (v, c, x, x_tr)
         v, c, ref, x, x_tr, Isyn = update_var(v, c, ref, x, x_tr, Isyn, fired, w)
-        if t > 2500:
+        if t > (lt/dt):
             x_tr_records.assign_add(x_tr)
-    x_tr_records = x_tr_records / 1000.0
+            Isyn_s.assign_add(Isyn)
+    x_tr_records = x_tr_records / ((T - lt)/dt)
+    Isyn_s = Isyn_s / ((T - lt) / dt)
 
-    inp1 = x_tr_records[:n_stim, ::10] / pamp
-    pred1 = (w['pc1'] @ x_tr_records[sum(neurons_per_group[:3]):sum(neurons_per_group[:3])+n_pred[0]])[:, ::10] / pamp
-    err1 = inp1 - pred1
-    inp2 = x_tr_records[sum(neurons_per_group[:3]):sum(neurons_per_group[:3])+n_pred[0], ::10] / pamp
-    pred2 = (w['pc2'] @ x_tr_records[sum(neurons_per_group[:6]):sum(neurons_per_group[:6])+n_pred[1]])[:, ::10] / pamp
-    err2 = inp2 - pred2
+    inp1 = x_tr_records[:n_stim, ::n_sample] / pamp
+    pred1 = (w['pc1'] @ x_tr_records[sum(neurons_per_group[:3]):sum(neurons_per_group[:3]) + n_pred[0]])[:, ::n_sample] / pamp
+    # err1 = inp1 - pred1
+    err1 = Isyn_s[n_stim:n_stim*2, ::n_sample] / pamp #- 600 * pamp
+    inp2 = x_tr_records[sum(neurons_per_group[:3]):sum(neurons_per_group[:3]) + n_pred[0], ::n_sample] / pamp
+    pred2 = (w['pc2'] @ x_tr_records[sum(neurons_per_group[:6]):sum(neurons_per_group[:6]) + n_pred[1]])[:, ::n_sample] / pamp
+    err2 = Isyn_s[sum(neurons_per_group[:4]):sum(neurons_per_group[:5]), ::n_sample] / pamp #- 600 * pamp
+    # err2 = inp2 - pred2
 
-    fig, axs = plt.subplots(nrows=4, ncols=3 * n_pc_layer, figsize=(4*4, 4*3*n_pc_layer))
-    for j in range(4):
+    fig, axs = plt.subplots(nrows=n_digit, ncols=3 * n_pc_layer, figsize=(4 * 4, 4 * 3 * n_pc_layer))
+    for j in range(n_digit):
         # col1 : input
-        input_plot = axs[j, 0].imshow(inp1[:, j].numpy().reshape(3,3), cmap="Reds", vmin=0, vmax=3000)
-        fig.colorbar(input_plot, ax=axs[j,0], shrink=0.2)
+        input_plot = axs[j, 0].imshow(inp1[:, j].numpy().reshape(nsqrt[0], nsqrt[0]), cmap="Reds")#, vmin=0, vmax=3000)
+        fig.colorbar(input_plot, ax=axs[j, 0], shrink=0.2)
         # col2 : err
-        err_plot = axs[j, 1].imshow(err1[:, j].numpy().reshape(3,3), cmap="bwr", vmin=-1000, vmax=1000)
-        fig.colorbar(err_plot, ax=axs[j,1], shrink=0.2)
+        err_plot = axs[j, 1].imshow(err1[:, j].numpy().reshape(nsqrt[0], nsqrt[0]), cmap="bwr", vmin=-1000, vmax=1000)
+        fig.colorbar(err_plot, ax=axs[j, 1], shrink=0.2)
         # col3 : pred
-        pred_plot = axs[j, 2].imshow(pred1[:, j].numpy().reshape(3,3), cmap="Reds", vmin=0, vmax=3000)
-        fig.colorbar(pred_plot, ax=axs[j,2], shrink=0.2)
+        pred_plot = axs[j, 2].imshow(pred1[:, j].numpy().reshape(nsqrt[0], nsqrt[0]), cmap="Reds")#, vmin=0, vmax=3000)
+        fig.colorbar(pred_plot, ax=axs[j, 2], shrink=0.2)
         # col1 : input
-        input2_plot = axs[j, 3].imshow(inp2[:, j].numpy().reshape(10, 10), cmap="Reds", vmin=0, vmax=3000)
+        input2_plot = axs[j, 3].imshow(inp2[:, j].numpy().reshape(nsqrt[1], nsqrt[1]), cmap="Reds")#, vmin=0, vmax=3000)
         fig.colorbar(input2_plot, ax=axs[j, 3], shrink=0.2)
         # col2 : err
-        err2_plot = axs[j, 4].imshow(err2[:, j].numpy().reshape(10, 10), cmap="bwr", vmin=-1000, vmax=1000)
+        err2_plot = axs[j, 4].imshow(err2[:, j].numpy().reshape(nsqrt[1], nsqrt[1]), cmap="bwr", vmin=-1000, vmax=1000)
         fig.colorbar(err2_plot, ax=axs[j, 4], shrink=0.2)
         # col3 : pred
-        pred2_plot = axs[j, 5].imshow(pred2[:, j].numpy().reshape(10, 10), cmap="Reds", vmin=0, vmax=3000)
+        pred2_plot = axs[j, 5].imshow(pred2[:, j].numpy().reshape(nsqrt[1], nsqrt[1]), cmap="Reds")#, vmin=0, vmax=3000)
         fig.colorbar(pred2_plot, ax=axs[j, 5], shrink=0.2)
 
     fig.tight_layout()
     fig.show()
 
-    w = weight_update(w, lr=2e-7, alpha_w=1e-4)
+    # if i_epoch > 0:
+    #     lr = [lr[pc_i] * (sse['pc' + str(pc_i + 1)][i_epoch - 1] / np.max(sse['pc' + str(pc_i + 1)]))
+    #             for pc_i in range(n_pc_layer)]
+
+    w = weight_update(w, lr=lr, alpha_w=1e-5)
     # dws = weight_update(w, lr=2e-7, alpha_w=1e-3)
     # w = tf.nn.relu(tf.add(w, dws))
-    sse['pc1'].append(tf.reduce_sum(tf.reduce_mean(err1 ** 2)).numpy())
-    sse['pc2'].append(tf.reduce_sum(tf.reduce_mean(err2 ** 2)).numpy())
+    sse['pc1'].append(np.log(tf.reduce_sum(tf.reduce_mean(err1 ** 2)).numpy()))
+    sse['pc2'].append(np.log(tf.reduce_sum(tf.reduce_mean(err2 ** 2)).numpy()))
 
-    if (i_epoch+1) % 10 == 0:
+    if (i_epoch + 1) % 10 == 0:
         fig2, axs2 = plt.subplots(nrows=2, ncols=2, sharex=True, sharey=True)
         axs2[0, 0].hist(w_init['pc1'].flatten())
         axs2[1, 0].hist(w['pc1'].numpy().flatten())
@@ -266,3 +278,6 @@ for i_epoch in range(n_epoch):
         fig3.show()
 
     plt.close('all')
+
+# mmm = 2.0
+# max_vals = np.array([n_gist/n_stim] + [n_pred_neurons[i] / n_gist for i in range(n_pc_layers)]) * mmm

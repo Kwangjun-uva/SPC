@@ -1,9 +1,10 @@
+from AdEx_const import *
 import numpy as np
 import tensorflow as tf
 import matplotlib.pyplot as plt
 import time
 # from create_33images import create_shapes, plot_imgset
-from test_func import weight_dist
+# from test_func import weight_dist
 from mnist_data import create_mnist_set, plot_mnist_set, scale_tensor
 from datetime import timedelta
 from scipy import stats
@@ -13,7 +14,6 @@ import pickle5 as pickle
 class AdEx_Layer(object):
 
     def __init__(self,
-                 neuron_model_constants,
                  num_pc_layers, num_pred_neurons,
                  num_stim,
                  gist_num, gist_connp, gist_maxw):
@@ -27,8 +27,8 @@ class AdEx_Layer(object):
         :param gist_maxw: list of int.
         """
 
-        for key in neuron_model_constants:
-            setattr(self, key, neuron_model_constants[key])
+        # for key in neuron_model_constants:
+        #     setattr(self, key, neuron_model_constants[key])
 
         # network architecture
         self.n_pc_layer = num_pc_layers
@@ -52,14 +52,14 @@ class AdEx_Layer(object):
         self.l_time = None
 
         # offset/bg current
-        self.offset = 600 * 10 ** -12
+        # self.offset = 600 * 10 ** -12
 
         # self.initialize_var()
 
     def initialize_var(self):
 
         # internal variables
-        self.v = tf.Variable(tf.ones([self.n_variable, self.batch_size], dtype=tf.float32) * self.EL)
+        self.v = tf.Variable(tf.ones([self.n_variable, self.batch_size], dtype=tf.float32) * EL)
         self.c = tf.Variable(tf.zeros([self.n_variable, self.batch_size], dtype=tf.float32))
         self.ref = tf.Variable(tf.zeros([self.n_variable, self.batch_size], dtype=tf.float32))
         # pre-synaptic variables
@@ -86,8 +86,7 @@ class AdEx_Layer(object):
         self.initialize_var()
 
         # feed external corrent to the first layer
-        # self.Iext = self.create_Iext(I_ext)
-        self.Iext = scale_tensor(tf.constant(I_ext, dtype=tf.float32))
+        self.Iext = tf.constant(I_ext, dtype=tf.float32)
 
         for t in range(int(self.T / self.dt)):
             # update internal variables (v, c, x, x_tr)
@@ -118,42 +117,41 @@ class AdEx_Layer(object):
 
         # update synaptic current
         self.update_x()
+        self.update_xtr()
 
         # update spike monitor (fired: dtype=bool): if fired = True, else = False
         # self.fired = tf.greater_equal(self.v, self.VT)
-        self.fired = tf.cast(tf.greater_equal(self.v, self.VT), tf.float32)
+        self.fired = tf.cast(tf.greater_equal(self.v, VT), tf.float32)
 
         # reset variables
-        self.v = self.fired * self.EL + (1-self.fired) * self.v
-        self.c = self.fired * tf.add(self.c, self.b) + (1-self.fired) * self.c
-        self.x = self.fired * -self.x_reset + (1-self.fired) * self.x
-
-        self.update_xtr()
+        self.v = self.fired * EL + (1-self.fired) * self.v
+        self.c = self.fired * tf.add(self.c, b) + (1-self.fired) * self.c
+        self.x = self.fired * -x_reset + (1-self.fired) * self.x
 
         # set lower boundary of v (Vrest = -70.6 mV)
-        self.v = tf.maximum(self.EL, self.v)
-        self.ref = tf.add(self.ref, self.fired * float(self.t_ref / self.dt))
+        self.v = tf.maximum(EL, self.v)
+        self.ref = tf.add(self.ref, self.fired * float(t_ref / self.dt))
 
     def update_v(self, constraint):
-        dv = (self.dt / self.Cm) * (self.gL * (self.EL - self.v) +
-                                    self.gL * self.DeltaT * tf.exp((self.v - self.VT) / self.DeltaT) +
+        dv = (self.dt / Cm) * (gL * (EL - self.v) +
+                                    gL * DeltaT * tf.exp((self.v - VT) / DeltaT) +
                                     self.Isyn - self.c)
         # dv_ref = tf.where(constraint, 0.0, dv)
         dv_ref = (1 -constraint) * dv
         self.v = tf.add(self.v, dv_ref)
 
     def update_c(self, constraint):
-        dc = (self.dt / self.tauw) * (self.a * (self.v - self.EL) - self.c)
+        dc = (self.dt / tauw) * (a * (self.v - EL) - self.c)
         # dc_ref = tf.where(constraint, 0, dc)
         dc_ref = (1 - constraint) * dc
         self.c = tf.add(self.c, dc_ref)
 
     def update_x(self):
-        dx = self.dt * (-self.x / self.tau_rise)
+        dx = self.dt * (-self.x / tau_rise)
         self.x = tf.add(self.x, dx)
 
     def update_xtr(self):
-        dxtr = self.dt * (-self.x / self.tau_rise - self.x_tr / self.tau_s)
+        dxtr = self.dt * (-self.x / tau_rise - self.x_tr / tau_s)
         self.x_tr = tf.add(self.x_tr, dxtr)
 
     def update_Isyn(self):
@@ -165,7 +163,7 @@ class AdEx_Layer(object):
 
         # gist = w['ig']Isyn['I']
         input_gist = tf.transpose(self.w['ig']) @ (self.x_tr[:self.neurons_per_group[0]])
-        self.Isyn[-self.n_gist:, :].assign(input_gist + self.offset)
+        self.Isyn[-self.n_gist:, :].assign(input_gist)# + self.offset)
 
         ### write a function for pc layers
         # for layer_i, nums in enumerate(self.neurons_per_group):
@@ -176,18 +174,7 @@ class AdEx_Layer(object):
 
             gist = tf.transpose(self.w['gp' + str(pc_layer_idx + 1)]) @ (self.x_tr[-self.n_gist:, :])
 
-            self.Isyn[next_p_idx:next_p_idx + next_p_size, :].assign(gist + self.offset)
-
-    def connect_pc(self):
-
-        for pc_layer_idx in range(self.n_pc_layer):
-            err_size = self.neurons_per_group[pc_layer_idx * 3 + 1]
-            pred_size = self.n_pred[pc_layer_idx]
-
-            norm_factor = 0.1 * pred_size
-
-            self.w['pc' + str(pc_layer_idx + 1)] = tf.random.normal((err_size, pred_size), 1.0, 0.3) / norm_factor
-            self.w_init['pc' + str(pc_layer_idx + 1)] = self.w['pc' + str(pc_layer_idx + 1)]
+            self.Isyn[next_p_idx:next_p_idx + next_p_size, :].assign(gist)# + self.offset)
 
     def connect_gist(self, conn_p, max_vals):
         '''
@@ -224,7 +211,7 @@ class AdEx_Layer(object):
         elif self._step > int(self.T / self.dt) - int(self.l_time / self.dt):
             # self.xtr_record[range1, range2].assign_add(sum_syn)
             # self.xtr_record.assign_add(self.Isyn)
-            self.xtr_record.assign_add(self.x_tr + self.offset)
+            self.xtr_record.assign_add(self.x_tr)# + self.offset)
 
     def train_network(self, num_epoch, sim_dur, sim_dt, sim_lt,
                       input_current,
@@ -311,17 +298,10 @@ class AdEx_Layer(object):
 
         return output
 
-pamp = 10 ** -12
-
-# load constants
-with open('adex_constants.pickle', 'rb') as f:
-    AdEx = pickle.load(f)
-    AdEx['x_reset'] = 400 * 10 ** (-12)
-
 # network parameters
-n_pred_neurons = [15**2, 10**2, 8**2]
+n_pred_neurons = [30**2, 25**2, 20**2]
 n_pc_layers = len(n_pred_neurons)
-n_gist = 64
+n_gist = 144
 
 # create external input
 batch_size = 30
@@ -343,28 +323,27 @@ sqrt_nstim = int(np.sqrt(n_stim))
 plot_mnist_set(testset=ext_current, testset_idx=test_set_idx, nDigit=n_shape, nSample=n_samples, savefolder='test_figures')
 plt.show()
 
-def conn_probs(n_a, n_b):
-    return np.sqrt(n_b/n_a) * 0.025
-
-conn_vals = np.array([conn_probs(a_i, b_i)
-                      for a_i, b_i in zip([n_stim] + [n_gist] * n_pc_layers, [n_gist] + n_pred_neurons)])
-max_vals = np.array([1] * (n_pc_layers + 1)) * 0.2
-# conn_vals = [0.01, 0.05, 0.05]
-# mmm = 0.25
-# max_vals = np.array([mmm] * (n_pc_layers + 1)) * [0.5, 0.4, 0.6]
+# def conn_probs(n_a, n_b):
+#     return np.sqrt(n_b/n_a) * 0.2 #* 0.025
+#
+# conn_vals = np.array([conn_probs(a_i, b_i)
+#                       for a_i, b_i in zip([n_stim] + [n_gist] * n_pc_layers, [n_gist] + n_pred_neurons)])
+# max_vals = np.array([1] * (n_pc_layers + 1))# * 0.2
+conn_vals = [0.005] * (n_pc_layers + 1)
+# max_vals  = [np.sqrt(1/mv_i) for mv_i in np.array([n_gist] + n_pred_neurons)]
+max_vals = np.array([n_gist/n_stim] + [np.sqrt(n_pred_neurons[i] / n_gist) for i in range(n_pc_layers)])
 
 
 # build network
-adex_01 = AdEx_Layer(neuron_model_constants=AdEx,
-                     num_pc_layers=n_pc_layers,
+adex_01 = AdEx_Layer(num_pc_layers=n_pc_layers,
                      num_pred_neurons=n_pred_neurons,
                      num_stim=n_stim,
                      gist_num=n_gist, gist_connp=conn_vals, gist_maxw=max_vals)
 
 # simulate
-sim_dur = 500 * 10 ** (-3)  # ms
+sim_dur = 350 * 10 ** (-3)  # ms
 dt = 1 * 10 ** (-4)  # ms
-learning_window = 150 * 10 ** -3
+learning_window = 100 * 10 ** -3
 
 n_epoch = 1
 
@@ -380,14 +359,16 @@ ccc = adex_01.xtr_record[sum(adex_01.neurons_per_group[:2]):sum(adex_01.neurons_
 fig, axs = plt.subplots(ncols=3, nrows=3)
 # fig2, axs2 = plt.subplots(ncols=2, nrows=3)
 for i in range(3):
-    axs[0, i].imshow(aaa[:, i].reshape(
+    a1 = axs[0, i].imshow(aaa[:, i].reshape(
         int(np.sqrt(n_gist)), int(np.sqrt(n_gist))),
-        cmap='Reds', vmin=600, vmax=3000)
-    axs[1, i].imshow(bbb[:, i].reshape(
+        cmap='Reds')#, vmin=600, vmax=3000)
+    fig.colorbar(a1, ax=axs[0,i], shrink=0.5)
+    a2 = axs[1, i].imshow(bbb[:, i].reshape(
         int(np.sqrt(n_pred_neurons[0])), int(np.sqrt(n_pred_neurons[0]))),
-        cmap='Reds', vmin=600, vmax=3000)
-    axs[2, i].imshow(ccc[:, i].reshape(
+        cmap='Reds')#, vmin=600, vmax=3000)
+    fig.colorbar(a2, ax=axs[1, i], shrink=0.5)
+    a3 = axs[2, i].imshow(ccc[:, i].reshape(
         int(np.sqrt(n_pred_neurons[1])), int(np.sqrt(n_pred_neurons[1]))),
-        cmap='Reds', vmin=600, vmax=3000)
-
+        cmap='Reds')#, vmin=600, vmax=3000)
+    fig.colorbar(a3, ax=axs[2, i], shrink=0.5)
 plt.show()
