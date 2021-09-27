@@ -25,29 +25,28 @@ def scale_tensor(x, target_min=600 * pamp, target_max=2000 * pamp, custom_range=
 
     return x
 
-def pre_process(data_set, label_set, nDigit, nSample, classes):
+def pre_process(data_set, label_set, nDigit, nSample, classes, original,
+                target_max = 3000 * pamp, target_min = 600 * pamp):
 
-    target_max = 3000 * pamp
-    target_min = 600 * pamp
     target_diff = target_max - target_min
 
     training_set = np.zeros((nDigit * nSample, np.multiply(*data_set[0].shape)))
+
     training_labels = []
 
     for i in range(nDigit):
         digit = data_set[np.where(label_set == classes[i])]
         rand_ids = np.random.choice(len(digit), nSample)
         curr_digit = digit[rand_ids].reshape(nSample, np.multiply(*data_set[0].shape))
-        norm_digits = curr_digit / np.linalg.norm(curr_digit, axis=1).reshape(nSample, 1)
+        if original==False:
+            norm_digits = curr_digit / np.linalg.norm(curr_digit, axis=1).reshape(nSample, 1)
 
-        div_a = norm_digits - np.min(norm_digits)
-        div_b = np.max(norm_digits) - np.min(norm_digits)
-        scale_01_set = np.divide(div_a, div_b, out=np.zeros_like(div_a), where=div_b != 0)
-        training_set[i * nSample:(i + 1) * nSample] = scale_01_set * target_diff + target_min
-
-        # training_set[i * nSample:(i + 1) * nSample] = norm_digits
-        # training_set[i * nSample:(i + 1) * nSample] = scale_tensor(tf.convert_to_tensor(norm_digits, dtype=tf.float32)).numpy()
-        # training_set[i * nSample:(i + 1) * nSample] = (12000 * norm_digits + 600) * pamp
+            div_a = norm_digits - np.min(norm_digits)
+            div_b = np.max(norm_digits) - np.min(norm_digits)
+            scale_01_set = np.divide(div_a, div_b, out=np.zeros_like(div_a), where=div_b != 0)
+            training_set[i * nSample:(i + 1) * nSample] = scale_01_set * target_diff + target_min
+        elif original==True:
+            training_set[i * nSample:(i + 1) * nSample] = curr_digit
 
         training_labels.append(label_set[np.where(label_set == classes[i])][rand_ids])
 
@@ -56,7 +55,7 @@ def pre_process(data_set, label_set, nDigit, nSample, classes):
     return training_set, training_labels
 
 
-def create_mnist_set(data_type, nSample, nDigit, test_digits=None, shuffle=False):
+def create_mnist_set(data_type, nSample, nDigit, test_digits=None, shuffle=False, original=False):
     if test_digits is not None:
         digits = test_digits
     else:
@@ -68,8 +67,8 @@ def create_mnist_set(data_type, nSample, nDigit, test_digits=None, shuffle=False
     # data_type = tf.keras.datasets.mnist
     (x_train, y_train), (x_test, y_test) = data_type.load_data()
 
-    training_set, training_labels = pre_process(x_train, y_train, nDigit, nSample, digits)
-    test_set, test_labels = pre_process(x_test, y_test, nDigit, nSample, digits)
+    training_set, training_labels = pre_process(x_train, y_train, nDigit, nSample, digits, original)
+    test_set, test_labels = pre_process(x_test, y_test, nDigit, nSample, digits, original)
     training_set_idx = np.arange(nDigit * nSample)
 
     if shuffle:

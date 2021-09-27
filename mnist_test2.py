@@ -6,15 +6,25 @@ from AdEx_const import *
 from mnist_data import create_mnist_set
 from create_33images import *
 
+# def poisson_spikegen(fr, tsim):
+#     dt = 1e-4
+#     nbins = int(tsim/dt)
+#     spikemat = (np.random.uniform(0, 1, nbins) < fr * dt).astype(float)
+#
+#     return spikemat
+
 # shapes = create_shapes(base_mean=1500 * pamp,
 #                        noise_var=500 * pamp,
 #                        n_imgs_per_shape=10)
 
-n_sample = 64
-n_digit = 3
+n_sample = 256
+n_digit = 10
 training_set, training_labels, test_set, test_labels, digits, training_set_idx = create_mnist_set(
     data_type=tf.keras.datasets.mnist,
     nSample=n_sample, nDigit=n_digit)
+
+
+
 batch_size = n_sample * n_digit
 
 Iext = training_set.T
@@ -202,7 +212,7 @@ def weight_update(w, lr, alpha_w):
 nsqrt = np.sqrt(np.array([n_stim] + n_pred)).astype(int)
 
 n_epoch = 30
-lr = [1e-7, 5e-8]
+lr = [1e-7, 1e-7]
 sse = {'pc1': [], 'pc2': []}
 for i_epoch in range(n_epoch):
     print('epoch #{0}/{1}'.format(i_epoch + 1, n_epoch))
@@ -226,7 +236,6 @@ for i_epoch in range(n_epoch):
     inp2 = x_tr_records[sum(neurons_per_group[:3]):sum(neurons_per_group[:3]) + n_pred[0], ::n_sample] / pamp
     pred2 = (w['pc2'] @ x_tr_records[sum(neurons_per_group[:6]):sum(neurons_per_group[:6]) + n_pred[1]])[:, ::n_sample] / pamp
     err2 = Isyn_s[sum(neurons_per_group[:4]):sum(neurons_per_group[:5]), ::n_sample] / pamp #- 600 * pamp
-    # err2 = inp2 - pred2
 
     fig, axs = plt.subplots(nrows=n_digit, ncols=3 * n_pc_layer, figsize=(4 * 4, 4 * 3 * n_pc_layer))
     for j in range(n_digit):
@@ -234,29 +243,30 @@ for i_epoch in range(n_epoch):
         input_plot = axs[j, 0].imshow(inp1[:, j].numpy().reshape(nsqrt[0], nsqrt[0]), cmap="Reds")#, vmin=0, vmax=3000)
         fig.colorbar(input_plot, ax=axs[j, 0], shrink=0.2)
         # col2 : err
-        err_plot = axs[j, 1].imshow(err1[:, j].numpy().reshape(nsqrt[0], nsqrt[0]), cmap="bwr", vmin=-1000, vmax=1000)
-        fig.colorbar(err_plot, ax=axs[j, 1], shrink=0.2)
+        err_plot = axs[j, 2].imshow(err1[:, j].numpy().reshape(nsqrt[0], nsqrt[0]), cmap="bwr", vmin=-1000, vmax=1000)
+        fig.colorbar(err_plot, ax=axs[j, 2], shrink=0.2)
         # col3 : pred
-        pred_plot = axs[j, 2].imshow(pred1[:, j].numpy().reshape(nsqrt[0], nsqrt[0]), cmap="Reds")#, vmin=0, vmax=3000)
-        fig.colorbar(pred_plot, ax=axs[j, 2], shrink=0.2)
+        pred_plot = axs[j, 1].imshow(pred1[:, j].numpy().reshape(nsqrt[0], nsqrt[0]), cmap="Reds")#, vmin=0, vmax=3000)
+        fig.colorbar(pred_plot, ax=axs[j, 1], shrink=0.2)
         # col1 : input
         input2_plot = axs[j, 3].imshow(inp2[:, j].numpy().reshape(nsqrt[1], nsqrt[1]), cmap="Reds")#, vmin=0, vmax=3000)
         fig.colorbar(input2_plot, ax=axs[j, 3], shrink=0.2)
         # col2 : err
-        err2_plot = axs[j, 4].imshow(err2[:, j].numpy().reshape(nsqrt[1], nsqrt[1]), cmap="bwr", vmin=-1000, vmax=1000)
-        fig.colorbar(err2_plot, ax=axs[j, 4], shrink=0.2)
+        err2_plot = axs[j, 5].imshow(err2[:, j].numpy().reshape(nsqrt[1], nsqrt[1]), cmap="bwr", vmin=-1000, vmax=1000)
+        fig.colorbar(err2_plot, ax=axs[j, 5], shrink=0.2)
         # col3 : pred
-        pred2_plot = axs[j, 5].imshow(pred2[:, j].numpy().reshape(nsqrt[1], nsqrt[1]), cmap="Reds")#, vmin=0, vmax=3000)
-        fig.colorbar(pred2_plot, ax=axs[j, 5], shrink=0.2)
+        pred2_plot = axs[j, 4].imshow(pred2[:, j].numpy().reshape(nsqrt[1], nsqrt[1]), cmap="Reds")#, vmin=0, vmax=3000)
+        fig.colorbar(pred2_plot, ax=axs[j, 4], shrink=0.2)
 
+    [axi.axis('off') for axi in axs.ravel()]
     fig.tight_layout()
     fig.show()
 
-    # if i_epoch > 0:
-    #     lr = [lr[pc_i] * (sse['pc' + str(pc_i + 1)][i_epoch - 1] / np.max(sse['pc' + str(pc_i + 1)]))
-    #             for pc_i in range(n_pc_layer)]
+    if (i_epoch + 1) % 5 == 0:
+        lr = [lr[pc_i] * (sse['pc' + str(pc_i + 1)][i_epoch - 1] / np.max(sse['pc' + str(pc_i + 1)]))
+                for pc_i in range(n_pc_layer)]
 
-    w = weight_update(w, lr=lr, alpha_w=1e-5)
+    w = weight_update(w, lr=lr, alpha_w=1e-12)
     # dws = weight_update(w, lr=2e-7, alpha_w=1e-3)
     # w = tf.nn.relu(tf.add(w, dws))
     sse['pc1'].append(np.log(tf.reduce_sum(tf.reduce_mean(err1 ** 2)).numpy()))

@@ -2,7 +2,7 @@ import numpy as np
 import tensorflow as tf
 from mnist_data import create_mnist_set, plot_mnist_set
 from tf_local import AdEx_Layer, pick_idx, conn_probs, update_sim_time
-from datetime import timedelta, datetime
+from datetime import datetime
 import os
 import sys
 import pickle5 as pickle
@@ -39,9 +39,9 @@ n_pc_layers = len(n_pred_neurons)
 n_gist = 128
 
 # create external input
-batch_size = 640
+batch_size = 128
 n_shape = 10
-n_samples = 64
+n_samples = 1024
 
 # simulate
 sim_dur = 350 * 10 ** (-3)  # ms
@@ -49,9 +49,9 @@ dt = 1 * 10 ** (-4)  # ms
 learning_window = 100 * 10 ** -3
 report_index = 1
 
-n_epoch = 100
-lrate = np.repeat(1.0, n_pc_layers) * 10 ** -9
-reg_alpha = np.repeat(1.0, n_pc_layers) * 10 ** -12
+n_epoch = int(sys.argv[3])
+lrate = np.repeat(1.0, n_pc_layers) * 10 ** -7
+reg_alpha = np.repeat(1.0, n_pc_layers) * 10 ** -10
 
 gpus = tf.config.experimental.list_logical_devices('GPU')
 

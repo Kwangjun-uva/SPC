@@ -378,7 +378,12 @@ class AdEx_Layer(object):
                               bat_size=batch_size)
 
                 # update weightss
-                self.weight_update(lr=lr, alpha_w=reg_a)
+                if (epoch_i + 1) % 20 == 0:
+                    lri = [lr[pc_i] * (self.sse['pc' + str(pc_i + 1)][epoch_i - 1] / np.max(self.sse['pc' + str(pc_i + 1)]))
+                            for pc_i in range(self.n_pc_layer)]
+                else:
+                    lri = lr
+                self.weight_update(lr=lri, alpha_w=reg_a)
 
                 end_iter_time = time.time()
 
@@ -642,7 +647,7 @@ if __name__ == "__main__":
     # create external input
     batch_size = 128
     n_shape = 3
-    n_samples = 512
+    n_samples = 1024
 
     # simulate
     sim_dur = 350 * 10 ** (-3)  # ms
@@ -651,9 +656,9 @@ if __name__ == "__main__":
     report_index = 1
 
     n_epoch = 100
-    lrate = np.repeat(1.0, n_pc_layers) * 10 ** -9
+    lrate = np.repeat(1.0, n_pc_layers) * 10 ** -7
     # lrate = np.array([1.0, 0.25, 0.1]) * 10 ** -9
-    reg_alpha = np.repeat(1.0, n_pc_layers) * 10 ** -12
+    reg_alpha = np.repeat(1.0, n_pc_layers) * 10 ** -10
 
     keras_data = tf.keras.datasets.mnist
     training_set, training_labels, test_set, test_labels, classes, training_set_idx = create_mnist_set(data_type=keras_data,
@@ -711,36 +716,42 @@ if __name__ == "__main__":
     # save simulation data
     save_data(save_folder)
 
+
+# test_n_sample = 16
+# test_iter_idx = int(n_samples/test_n_sample)
+#
+# testing_set = test_set[::test_iter_idx]
+
 # test_fig = adex_01.test_inference(imgs=test_set,
 #                                nsample=test_n_sample,
 #                                ndigit=3,
 #                                simul_dur=sim_dur, sim_dt=dt, sim_lt=learning_window,
 #                                train_or_test='test')
-
+#
 # p1 = adex_01.xtr_record[sum(adex_01.neurons_per_group[:3]): sum(adex_01.neurons_per_group[:4])].numpy().T
 # p2 = adex_01.xtr_record[sum(adex_01.neurons_per_group[:6]): sum(adex_01.neurons_per_group[:7])].numpy().T
 # p3 = adex_01.xtr_record[sum(adex_01.neurons_per_group[:9]): sum(adex_01.neurons_per_group[:10])].numpy().T
 # gp = adex_01.xtr_record[-n_gist:].numpy().T
-#
+
 # from sklearn.preprocessing import LabelEncoder
 # from sklearn.decomposition import PCA
 # from sklearn.preprocessing import MinMaxScaler
 # from sklearn.pipeline import Pipeline
 # from sklearn.cluster import KMeans
 # from sklearn.preprocessing import StandardScaler
-# # from sklearn.metrics import silhouette_score
-# # from sklearn.metrics import adjusted_rand_score
-#
-# # class_acc = []
-# # for i in range(2, np.min([*p1.shape])):
-# #     preprocessor = Pipeline([("scaler", MinMaxScaler()), ("pca", PCA(n_components=i, random_state=42)), ])
-# #     clusterer = Pipeline(
-# #         [('kmeans', KMeans(n_clusters=3, init='k-means++', n_init=100, max_iter=500, random_state=42, ),), ])
-# #     pipe = Pipeline([('preprocessor', preprocessor), ('clusterer', clusterer)])
-# #     pipe.fit(p1)
-# #     predicted_labels = pipe["clusterer"]["kmeans"].labels_
-# #     class_acc.append(sum(true_labels==predicted_labels)/len(true_labels))
-# #     print ('{0}/784 component done'.format(i))
+# from sklearn.metrics import silhouette_score
+# from sklearn.metrics import adjusted_rand_score
+
+# class_acc = []
+# for i in range(2, np.min([*p1.shape])):
+#     preprocessor = Pipeline([("scaler", MinMaxScaler()), ("pca", PCA(n_components=i, random_state=42)), ])
+#     clusterer = Pipeline(
+#         [('kmeans', KMeans(n_clusters=3, init='k-means++', n_init=100, max_iter=500, random_state=42, ),), ])
+#     pipe = Pipeline([('preprocessor', preprocessor), ('clusterer', clusterer)])
+#     pipe.fit(p1)
+#     predicted_labels = pipe["clusterer"]["kmeans"].labels_
+#     class_acc.append(sum(true_labels==predicted_labels)/len(true_labels))
+#     print ('{0}/784 component done'.format(i))
 #
 # # preprocessor = Pipeline([ ("scaler", MinMaxScaler()), ("pca", PCA(n_components=30, random_state=42)),])
 # # clusterer = Pipeline([('kmeans', KMeans(n_clusters=3, init='k-means++', n_init=100, max_iter=500, random_state=42,),),])
@@ -760,3 +771,96 @@ if __name__ == "__main__":
 #     predicted_labels = pipe["clusterer"]["kmeans"].labels_
 #     acc.append(sum(true_labels==predicted_labels)/len(true_labels))
 #     print ('{0}/{1} component done, nc = {2}'.format(i, len(pp), pipe['clusterer']['kmeans'].cluster_centers_.shape[1]))
+
+# def infer_cluster_labels(kmeans, actual_labels):
+#     inferred_labels = {}
+#
+#
+#     for i in range(kmeans.n_clusters):
+#
+#         # find index of points in cluster
+#         labels = []
+#         index = np.where(kmeans.labels_ == i)
+#
+#         # append actual labels for each point in cluster
+#         labels.append(actual_labels[index])
+#
+#         # determine most common label
+#         if len(labels[0]) == 1:
+#             counts = np.bincount(labels[0])
+#         else:
+#             counts = np.bincount(np.squeeze(labels))
+#
+#         # assign the cluster to a value in the inferred_labels dictionary
+#         if np.argmax(counts) in inferred_labels:
+#             # append the new number to the existing array at this slot
+#             inferred_labels[np.argmax(counts)].append(i)
+#         else:
+#             # create a new array in this slot
+#             inferred_labels[np.argmax(counts)] = [i]
+#
+#         # print(labels)
+#         # print('Cluster: {}, label: {}'.format(i, np.argmax(counts)))
+#
+#     return inferred_labels
+#
+#
+# def infer_data_labels(X_labels, cluster_labels):
+#
+#
+#     # empty array of len(X)
+#     predicted_labels = np.zeros(len(X_labels)).astype(np.uint8)
+#
+#     for i, cluster in enumerate(X_labels):
+#         for key, value in cluster_labels.items():
+#             if cluster in value:
+#                 predicted_labels[i] = key
+#
+#     return predicted_labels
+#
+# def kmeans_acc(data, true_label):
+#
+#     x = MinMaxScaler().fit_transform(data)
+#     xx, xy = [int(np.sqrt(data.shape[1]))] * 2
+#
+#     kmeans = MiniBatchKMeans(n_clusters=64)
+#     kmeans.fit(x)
+#     MiniBatchKMeans(n_clusters=64)
+#
+#     cluster_labels = infer_cluster_labels(kmeans, true_label)
+#     test_clusters = kmeans.predict(x)
+#     predicted_labels = infer_data_labels(test_clusters, cluster_labels)
+#     print (metrics.accuracy_score(true_label, predicted_labels))
+#
+#     # Initialize and fit KMeans algorithm
+#     kmeans = MiniBatchKMeans(n_clusters=64)
+#     kmeans.fit(x)
+#
+#     # record centroid values
+#     centroids = kmeans.cluster_centers_
+#
+#     # reshape centroids into images
+#     images = centroids.reshape(64, xx, xy)
+#     # images = images.astype(np.uint8)
+#
+#     # determine cluster labels
+#     cluster_labels = infer_cluster_labels(kmeans, test_set_labels)
+#
+#     # create figure with subplots using matplotlib.pyplot
+#     fig, axs = plt.subplots(8, 8, figsize=(20, 20))
+#     # plt.gray()
+#
+#     # loop through subplots and add centroid images
+#     for i, ax in enumerate(axs.flat):
+#
+#         # determine inferred label using cluster_labels dictionary
+#         for key, value in cluster_labels.items():
+#             if i in value:
+#                 ax.set_title('Inferred Label: {}'.format(key))
+#
+#         # add image to subplot
+#         ax.imshow(images[i], cmap='Reds', vmin=0, vmax=1)
+#         ax.axis('off')
+#
+#     # display the figure
+#     fig.show()
