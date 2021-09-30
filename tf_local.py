@@ -614,10 +614,10 @@ def save_data(sim_name):
              training_labels=training_labels,
              test_set_labels=test_labels,
              rep_set_idx=rep_set_idx)
-    np.savez(sim_name + '/test_dict',
-             digits=classes,
-             test_set_idx=training_set_idx,
-             training_labels=test_labels)
+    # np.savez(sim_name + '/test_dict',
+    #          digits=classes,
+    #          test_set_idx=training_set_idx,
+    #          training_labels=test_labels)
 
     # save simulation params
     sim_params = {'n_pc_layers': n_pc_layers, 'n_pred_neurons': n_pred_neurons, 'n_gist': n_gist,

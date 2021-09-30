@@ -82,7 +82,14 @@ training_set = np.load(save_folder + '/training_data.npy')
 test_set = np.load(save_folder + '/test_data.npy')
 
 n_stim = training_set.shape[1]
+
+# test inference on subset of test data
+test_samples = 128
 test_n_sample = 16
+test_iter_idx = int(test_set.shape[0]/n_shape/test_samples)
+
+testing_set = test_set[::test_iter_idx]
+test_labels = test_set_labels[::test_iter_idx]
 
 # build network
 adex_01 = AdEx_Layer(sim_directory=save_folder,
@@ -92,7 +99,7 @@ adex_01 = AdEx_Layer(sim_directory=save_folder,
 
 # test the model performance with the full test set
 # plotting is only for n_samples per digit
-sse = adex_01.test_inference(data_set=test_set, ndigit=n_shape, nsample=n_samples,
+sse = adex_01.test_inference(data_set=testing_set, ndigit=n_shape, nsample=test_n_sample,
                              simul_dur=sim_dur, sim_dt=dt, sim_lt=learning_window,
                              train_or_test='test')
 plt.show()
@@ -113,7 +120,7 @@ p1 = adex_01.xtr_record[sum(adex_01.neurons_per_group[:3]): sum(adex_01.neurons_
 p2 = adex_01.xtr_record[sum(adex_01.neurons_per_group[:6]): sum(adex_01.neurons_per_group[:7])].numpy().T
 p3 = adex_01.xtr_record[sum(adex_01.neurons_per_group[:9]): sum(adex_01.neurons_per_group[:10])].numpy().T
 gp = adex_01.xtr_record[-n_gist:].numpy().T
-pp = [test_set, p1_pred, p1, p2, p3, gp]
+pp = [testing_set, p1_pred, p1, p2, p3, gp]
 
 def calculate_metrics(estimator, labels):
 
@@ -255,12 +262,12 @@ def kmeans_class(data, true_label, nc, which='all'):
 
     return class_acc, fig
 
-# k_range = [10, 128]
-# best_ks = []
-# for i in range(len(pp)):
-#     scaled_data = MinMaxScaler().fit_transform(pp[i])
-#     best_k, results = chooseBestKforKMeans(scaled_data, k_range)
-#     best_ks.append(best_k)
+k_range = [10, 128]
+best_ks = []
+for i in range(len(pp)):
+    scaled_data = MinMaxScaler().fit_transform(pp[i])
+    best_k, results = chooseBestKforKMeans(scaled_data, k_range)
+    best_ks.append(best_k)
 
 # table1 = pd.DataFrame(data={'data set':['input', 'p1_pred', 'p1', 'p2', 'p3', 'g'],
 #                             'k10':np.zeros(len(pp)), 'k64':np.zeros(len(pp)), 'k7':np.zeros(len(pp))})
