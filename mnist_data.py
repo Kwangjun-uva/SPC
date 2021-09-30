@@ -38,13 +38,17 @@ def pre_process(data_set, label_set, nDigit, nSample, classes, original,
         digit = data_set[np.where(label_set == classes[i])]
         rand_ids = np.random.choice(len(digit), nSample)
         curr_digit = digit[rand_ids].reshape(nSample, np.multiply(*data_set[0].shape))
-        if original==False:
-            norm_digits = curr_digit / np.linalg.norm(curr_digit, axis=1).reshape(nSample, 1)
 
+        if original==False:
+            # normalize into a unit vector
+            norm_digits = curr_digit / np.linalg.norm(curr_digit, axis=1).reshape(nSample, 1)
+            # scale to [0, 1]
             div_a = norm_digits - np.min(norm_digits)
             div_b = np.max(norm_digits) - np.min(norm_digits)
             scale_01_set = np.divide(div_a, div_b, out=np.zeros_like(div_a), where=div_b != 0)
+            # scale to [min, max]
             training_set[i * nSample:(i + 1) * nSample] = scale_01_set * target_diff + target_min
+
         elif original==True:
             training_set[i * nSample:(i + 1) * nSample] = curr_digit
 
@@ -63,8 +67,7 @@ def create_mnist_set(data_type, nSample, nDigit, test_digits=None, shuffle=False
         digits = np.random.choice(range(0, 10), nDigit, replace=False)
         digits.sort()
 
-    # load mnist dataset from tf.keras
-    # data_type = tf.keras.datasets.mnist
+    # load dataset from tf.keras
     (x_train, y_train), (x_test, y_test) = data_type.load_data()
 
     training_set, training_labels = pre_process(x_train, y_train, nDigit, nSample, digits, original)
@@ -107,7 +110,7 @@ def plot_mnist_set(testset, testset_idx, nDigit, nSample, savefolder):
             iy = 30 * j + 1
             img[ix:ix + 28, iy:iy + 28] = X[i * nSample + j].reshape((28, 28))
 
-    plt.imshow(img, cmap="Reds", vmin=1000e-12, vmax=3000e-12)
+    plt.imshow(img, cmap="Reds", vmin=600e-12, vmax=3000e-12)
     plt.xticks([])
     plt.yticks([])
     plt.title('MNIST images: nDigits={0}, nSample={1}'.format(nDigit, nSample))

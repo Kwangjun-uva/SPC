@@ -224,10 +224,10 @@ class AdEx_Layer(object):
 
         # E+ = I - P
         self.Isyn[curr_p_idx + curr_p_size:curr_p_idx + 2 * curr_p_size, :].assign(
-                tf.add(bu_sensory, -td_pred))
+                tf.add(bu_sensory, -td_pred) + 600 * pamp)
         # E- = -I + P
         self.Isyn[curr_p_idx + 2 * curr_p_size:next_p_idx, :].assign(
-            tf.add(-bu_sensory, td_pred))
+            tf.add(-bu_sensory, td_pred) + 600 * pamp)
 
         # P = bu_error + td_error + gist
         bu_err_pos = tf.transpose(self.w['pc' + str(pc_layer_idx + 1)]) @ (
@@ -372,6 +372,19 @@ class AdEx_Layer(object):
 
             epoch_time = time.time()
 
+            if ((epoch_i + 1) % 5 == 0) and (lr[0] > 1e-10):
+                lr *= np.exp(-0.1 * ((epoch_i + 1) / 5))
+
+            for pc_i in range(1, self.n_pc_layer + 1):
+                self.lr_hist['pc' + str(pc_i)].append(lr[pc_i - 1])
+
+            # plot learning rate history
+            lr_fig = plt.figure()
+            plt.plot(self.lr_hist['pc1'])
+            plt.xlabel('epoch #')
+            plt.ylabel('learning rate')
+            lr_fig.savefig(self.model_dir + '/lr_hist.png')
+
             for iter_i in range(n_batch):
                 iter_time = time.time()
                 curr_batch = input_current[:, iter_i * batch_size:(iter_i + 1) * batch_size]
@@ -381,16 +394,7 @@ class AdEx_Layer(object):
                               bat_size=batch_size)
 
                 # update weightss
-
-                if (epoch_i + 1) % 20 == 0:
-                    lri = [lr[pc_i] * (self.sse['pc' + str(pc_i + 1)][epoch_i - 1] / np.max(self.sse['pc' + str(pc_i + 1)]))
-                            for pc_i in range(self.n_pc_layer)]
-                else:
-                    lri = lr
-                for pc_i in range(1, self.n_pc_layer + 1):
-                    self.lr_hist['pc' + str(pc_i)].append(lri)
-
-                self.weight_update(lr=lri, alpha_w=reg_a)
+                self.weight_update(lr=lr, alpha_w=reg_a)
 
                 end_iter_time = time.time()
 
@@ -646,9 +650,10 @@ if __name__ == "__main__":
     #     AdEx['x_reset'] = 400 * 10 ** (-12)
 
     # network parameters
-    n_pred_neurons = [30**2, 25**2, 20**2] # preferably each entry is an integer that has an integer square root
+    # n_pred_neurons = [30**2, 25**2, 20**2] # preferably each entry is an integer that has an integer square root
+    n_pred_neurons = [30 ** 2, 25 ** 2, 20 ** 2]  # preferably each entry is an integer that has an integer square root
     n_pc_layers = len(n_pred_neurons)
-    n_gist = 144
+    n_gist = 12 ** 2
 
     # create external input
     batch_size = 256
@@ -661,10 +666,10 @@ if __name__ == "__main__":
     learning_window = 100 * 10 ** -3
     report_index = 1
 
-    n_epoch = 50
+    n_epoch = 100
     lrate = np.repeat(1.0, n_pc_layers) * 10 ** -7
     # lrate = np.array([1.0, 0.25, 0.1]) * 10 ** -9
-    reg_alpha = np.repeat(1.0, n_pc_layers) * 10 ** -10
+    reg_alpha = np.repeat(1.0, n_pc_layers) * 10 ** -12
 
     keras_data = tf.keras.datasets.mnist
     training_set, training_labels, test_set, test_labels, classes, training_set_idx = create_mnist_set(data_type=keras_data,
