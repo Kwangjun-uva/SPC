@@ -323,10 +323,8 @@ class AdEx_Layer(object):
 
             self.w['pc' + str(pc_layer_idx + 1)] = tf.nn.relu(tf.add(self.w['pc' + str(pc_layer_idx + 1)], dws))
 
-    def test_inference(self, imgs, ndigit, nsample,
+    def test_inference(self, data_set, ndigit, nsample,
                        simul_dur, sim_dt, sim_lt, train_or_test):
-
-        data_set = imgs
 
         # load the model
         self.__call__(sim_duration=simul_dur, time_step=sim_dt, lt=sim_lt,
@@ -334,16 +332,16 @@ class AdEx_Layer(object):
                       bat_size=data_set.shape[0])
 
         input_shape = int(np.sqrt(self.n_stim))
-        n_plots = 1
-        sample_size = int(data_set.shape[0]/n_plots)
-        input_image = tf.reshape(self.xtr_record[:self.n_stim, ::n_plots],
-                                 (input_shape, input_shape, sample_size)) / pamp
+        idcs = int(data_set.shape[0]/ndigit/nsample)
+        total_samples = int(ndigit * nsample)
+        input_image = tf.reshape(self.xtr_record[:self.n_stim, ::idcs],
+                                 (input_shape, input_shape, total_samples)) / pamp
         reconstructed_image = tf.reshape(
-            self.w['pc1'] @ self.xtr_record[self.n_stim * 3:self.n_stim * 3 + self.n_pred[0], ::n_plots],
-            (input_shape, input_shape, sample_size)) / pamp
+            self.w['pc1'] @ self.xtr_record[self.n_stim * 3:self.n_stim * 3 + self.n_pred[0], ::idcs],
+            (input_shape, input_shape, total_samples)) / pamp
 
-        l1rep_fig = plot_pc1rep(input_image.numpy(), reconstructed_image.numpy(), ndigit, int(sample_size/ndigit))
-        l1rep_fig.savefig(self.model_dir + '/{0}_nD{1}_nS{2}.png'.format(train_or_test, ndigit, int(sample_size/ndigit)))
+        l1rep_fig = plot_pc1rep(input_image.numpy(), reconstructed_image.numpy(), ndigit, nsample)
+        l1rep_fig.savefig(self.model_dir + '/{0}_nD{1}_nS{2}.png'.format(train_or_test, ndigit, nsample))
 
         return l1rep_fig
 
@@ -356,6 +354,11 @@ class AdEx_Layer(object):
                       report_idx, n_plot_idx):
 
         plt.close('all')
+
+        # create lr history
+        self.lr_hist = {}
+        for pc_i in range(1, self.n_pc_layer + 1):
+            self.lr_hist['pc' + str(pc_i)] = []
 
         # number of batches
         n_batch = int(input_current.shape[1] / batch_size)
@@ -378,11 +381,15 @@ class AdEx_Layer(object):
                               bat_size=batch_size)
 
                 # update weightss
+
                 if (epoch_i + 1) % 20 == 0:
                     lri = [lr[pc_i] * (self.sse['pc' + str(pc_i + 1)][epoch_i - 1] / np.max(self.sse['pc' + str(pc_i + 1)]))
                             for pc_i in range(self.n_pc_layer)]
                 else:
                     lri = lr
+                for pc_i in range(1, self.n_pc_layer + 1):
+                    self.lr_hist['pc' + str(pc_i)].append(lri)
+
                 self.weight_update(lr=lri, alpha_w=reg_a)
 
                 end_iter_time = time.time()
@@ -460,9 +467,8 @@ class AdEx_Layer(object):
                                     weights=self.w, weights_init=self.w_init,
                                     n_pc=self.n_pc_layer, epoch_i=epoch_i)
 
-                test_fig = self.test_inference(imgs=test_current,
-                                               nsample=test_nsample,
-                                               ndigit=n_class,
+                test_fig = self.test_inference(data_set=test_current,
+                                               ndigit=n_class, nsample=test_nsample,
                                                simul_dur=simul_dur, sim_dt=sim_dt, sim_lt=sim_lt,
                                                train_or_test='test')
 
@@ -645,8 +651,8 @@ if __name__ == "__main__":
     n_gist = 144
 
     # create external input
-    batch_size = 128
-    n_shape = 3
+    batch_size = 256
+    n_shape = 10
     n_samples = 1024
 
     # simulate
@@ -655,7 +661,7 @@ if __name__ == "__main__":
     learning_window = 100 * 10 ** -3
     report_index = 1
 
-    n_epoch = 100
+    n_epoch = 50
     lrate = np.repeat(1.0, n_pc_layers) * 10 ** -7
     # lrate = np.array([1.0, 0.25, 0.1]) * 10 ** -9
     reg_alpha = np.repeat(1.0, n_pc_layers) * 10 ** -10
@@ -709,7 +715,7 @@ if __name__ == "__main__":
                                 simul_dur=sim_dur, sim_dt=dt, sim_lt=learning_window,
                                 lr=lrate, reg_a=reg_alpha,
                                 input_current=training_set.T,
-                                test_current=testing_set, test_nsample = test_n_sample,
+                                test_current=testing_set, test_nsample=test_n_sample,
                                 n_class=n_shape, batch_size=batch_size,
                                 set_idx=rep_set_idx, report_idx=report_index, n_plot_idx=n_plot_idx)
 
@@ -722,22 +728,9 @@ if __name__ == "__main__":
 #
 # testing_set = test_set[::test_iter_idx]
 
-# test_fig = adex_01.test_inference(imgs=test_set,
-#                                nsample=test_n_sample,
-#                                ndigit=3,
-#                                simul_dur=sim_dur, sim_dt=dt, sim_lt=learning_window,
-#                                train_or_test='test')
-#
-# p1 = adex_01.xtr_record[sum(adex_01.neurons_per_group[:3]): sum(adex_01.neurons_per_group[:4])].numpy().T
-# p2 = adex_01.xtr_record[sum(adex_01.neurons_per_group[:6]): sum(adex_01.neurons_per_group[:7])].numpy().T
-# p3 = adex_01.xtr_record[sum(adex_01.neurons_per_group[:9]): sum(adex_01.neurons_per_group[:10])].numpy().T
-# gp = adex_01.xtr_record[-n_gist:].numpy().T
-
 # from sklearn.preprocessing import LabelEncoder
 # from sklearn.decomposition import PCA
-# from sklearn.preprocessing import MinMaxScaler
 # from sklearn.pipeline import Pipeline
-# from sklearn.cluster import KMeans
 # from sklearn.preprocessing import StandardScaler
 # from sklearn.metrics import silhouette_score
 # from sklearn.metrics import adjusted_rand_score
@@ -771,11 +764,53 @@ if __name__ == "__main__":
 #     predicted_labels = pipe["clusterer"]["kmeans"].labels_
 #     acc.append(sum(true_labels==predicted_labels)/len(true_labels))
 #     print ('{0}/{1} component done, nc = {2}'.format(i, len(pp), pipe['clusterer']['kmeans'].cluster_centers_.shape[1]))
-
+#
+#
+# from sklearn.preprocessing import MinMaxScaler
+# from sklearn.cluster import KMeans
+# from sklearn import metrics
+# from sklearn.cluster import MiniBatchKMeans
+# from math import isqrt
+# import pandas as pd
+#
+# test_fig = adex_01.test_inference(data_set=test_set,
+#                                nsample=test_n_sample,
+#                                ndigit=3,
+#                                simul_dur=sim_dur, sim_dt=dt, sim_lt=learning_window,
+#                                train_or_test='test')
+#
+# p1_pred = (adex_01.w['pc1'] @
+#            adex_01.xtr_record[sum(adex_01.neurons_per_group[:3]): sum(adex_01.neurons_per_group[:4])]).numpy().T
+# p1 = adex_01.xtr_record[sum(adex_01.neurons_per_group[:3]): sum(adex_01.neurons_per_group[:4])].numpy().T
+# p2 = adex_01.xtr_record[sum(adex_01.neurons_per_group[:6]): sum(adex_01.neurons_per_group[:7])].numpy().T
+# p3 = adex_01.xtr_record[sum(adex_01.neurons_per_group[:9]): sum(adex_01.neurons_per_group[:10])].numpy().T
+# gp = adex_01.xtr_record[-n_gist:].numpy().T
+# pp = [test_set, p1_pred, p1, p2, p3, gp]
+#
+# def calculate_metrics(estimator, data, labels):
+#
+#     # Calculate and print metrics
+#     print('Number of Clusters: {}'.format(estimator.n_clusters))
+#     print('Inertia: {}'.format(estimator.inertia_))
+#     print('Homogeneity: {}'.format(metrics.homogeneity_score(labels, estimator.labels_)))
+#
+# test different numbers of clusters1
+# clusters = [10, 16, 36, 64, 144, 256]
+# for n_clusters in clusters:
+#     estimator = MiniBatchKMeans(n_clusters=n_clusters)
+#     X = MinMaxScaler().fit_transform(test_set)
+#     estimator.fit(X)
+#     # print cluster metrics
+#     calculate_metrics(estimator, X, test_labels)
+#     # determine predicted labels
+#     cluster_labels = infer_cluster_labels(estimator, test_labels)
+#     predicted_Y = infer_data_labels(estimator.labels_, cluster_labels)
+#     # calculate and print accuracy
+#     print('Accuracy: {}\n'.format(metrics.accuracy_score(test_labels, predicted_Y)))
+#
 # def infer_cluster_labels(kmeans, actual_labels):
+#
 #     inferred_labels = {}
-#
-#
 #     for i in range(kmeans.n_clusters):
 #
 #         # find index of points in cluster
@@ -807,7 +842,6 @@ if __name__ == "__main__":
 #
 # def infer_data_labels(X_labels, cluster_labels):
 #
-#
 #     # empty array of len(X)
 #     predicted_labels = np.zeros(len(X_labels)).astype(np.uint8)
 #
@@ -818,41 +852,38 @@ if __name__ == "__main__":
 #
 #     return predicted_labels
 #
-# def kmeans_acc(data, true_label):
+# def is_square(i: int) -> bool:
+#     return i == isqrt(i) ** 2
+#
+# def kmeans_acc(data, true_label, nc):
 #
 #     x = MinMaxScaler().fit_transform(data)
 #     xx, xy = [int(np.sqrt(data.shape[1]))] * 2
 #
-#     kmeans = MiniBatchKMeans(n_clusters=64)
+#     kmeans = MiniBatchKMeans(n_clusters=nc)
 #     kmeans.fit(x)
-#     MiniBatchKMeans(n_clusters=64)
 #
 #     cluster_labels = infer_cluster_labels(kmeans, true_label)
 #     test_clusters = kmeans.predict(x)
 #     predicted_labels = infer_data_labels(test_clusters, cluster_labels)
 #     print (metrics.accuracy_score(true_label, predicted_labels))
 #
-#     # Initialize and fit KMeans algorithm
-#     kmeans = MiniBatchKMeans(n_clusters=64)
-#     kmeans.fit(x)
-#
 #     # record centroid values
 #     centroids = kmeans.cluster_centers_
 #
 #     # reshape centroids into images
-#     images = centroids.reshape(64, xx, xy)
+#     images = centroids.reshape(nc, xx, xy)
 #     # images = images.astype(np.uint8)
 #
-#     # determine cluster labels
-#     cluster_labels = infer_cluster_labels(kmeans, test_set_labels)
-#
 #     # create figure with subplots using matplotlib.pyplot
-#     fig, axs = plt.subplots(8, 8, figsize=(20, 20))
-#     # plt.gray()
+#     if is_square(nc):
+#         pltx, plty = [int(np.sqrt(nc))] * 2
+#     else:
+#         pltx, plty = [nc, 1]
 #
+#     fig, axs = plt.subplots(pltx, plty, figsize=(20, 20))
 #     # loop through subplots and add centroid images
 #     for i, ax in enumerate(axs.flat):
-#
 #         # determine inferred label using cluster_labels dictionary
 #         for key, value in cluster_labels.items():
 #             if i in value:
@@ -864,3 +895,79 @@ if __name__ == "__main__":
 #
 #     # display the figure
 #     fig.show()
+#
+# # scaled inertia
+# def kMeansRes(scaled_data, k, alpha_k=0.02):
+#     '''
+#     Parameters
+#     ----------
+#     scaled_data: matrix
+#         scaled data. rows are samples and columns are features for clustering
+#     k: int
+#         current k for applying KMeans
+#     alpha_k: float
+#         manually tuned factor that gives penalty to the number of clusters
+#     Returns
+#     -------
+#     scaled_inertia: float
+#         scaled inertia value for current k
+#     '''
+#
+#     inertia_o = np.square((scaled_data - scaled_data.mean(axis=0))).sum()
+#     # fit k-means
+##     kmeans = KMeans(n_clusters=k, random_state=0).fit(scaled_data)
+#     kmeans = MiniBatchKMeans(n_clusters=k, random_state=0).fit(scaled_data)
+#     scaled_inertia = kmeans.inertia_ / inertia_o + alpha_k * k
+#     return scaled_inertia
+#
+# def chooseBestKforKMeans(scaled_data, k_range):
+#     ans = []
+#     for k in k_range:
+#         scaled_inertia = kMeansRes(scaled_data, k)
+#         ans.append((k, scaled_inertia))
+#     results = pd.DataFrame(ans, columns = ['k','Scaled Inertia']).set_index('k')
+#     best_k = results.idxmin()[0]
+#     return best_k, results
+#
+# for i in range(len(pp)):
+#     scaled_data = MinMaxScaler().fit_transform(pp[i])
+#     best_k, results = chooseBestKforKMeans(scaled_data, k)
+#
+# def kmeans_accuracy(data, true_label, nc):
+#     x = MinMaxScaler().fit_transform(data)
+#     xx, xy = [int(np.sqrt(data.shape[1]))] * 2
+#     kmeans = MiniBatchKMeans(n_clusters=nc)
+#     kmeans.fit(x)
+#     cluster_labels = infer_cluster_labels(kmeans, true_label)
+#     test_clusters = kmeans.predict(x)
+#     predicted_labels = infer_data_labels(test_clusters, cluster_labels)
+#
+#     return metrics.accuracy_score(true_label, predicted_labels)
+
+# table1 = pd.DataFrame(data={'data set':['input', 'p1_pred', 'p1', 'p2', 'p3', 'g'],
+#                             'k10':np.zeros(len(pp)), 'k64':np.zeros(len(pp)), 'k7':np.zeros(len(pp))})
+# accs = {'k10':np.zeros(len(pp)), 'k64':np.zeros(len(pp)), 'k7':np.zeros(len(pp))}
+# for key, grp in accs.items():
+#     nc = int(re.findall(r'\d+', bbb[0])[0])
+#     for i in range(100):
+#         grp += [kmeans_accuracy(ppi, test_labels, nc) for ppi in pp]
+#     grp /= 100
+#
+# fig, ax = plt.subplots()
+# # hide axes
+# fig.patch.set_visible(False)
+# ax.axis('off')
+# ax.axis('tight')
+# ax.table(cellText=table1.round(2).values, colLabels=table1.columns, loc='center')
+# fig.tight_layout()
+# plt.show()
+#
+# for key, grp in table1.items():
+#     if key != 'data set':
+#         table[key] = accs[key]
+
+# ncs = [7, 10, 64]
+# for j in range(len(ncs)):
+#     for i in range(len(pp)):
+#         figi = kmeans_acc(pp[i], test_labels, ncs[j])
+#         figi.savefig('/home/kwangjun/PycharmProjects/SPC/2021_09_27_17_37_nD3nS1024nEP100/kmeans_clustering/k' + str(ncs[j]) + table1['data set'][i])
