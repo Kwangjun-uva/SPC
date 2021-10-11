@@ -84,7 +84,7 @@ test_set = np.load(save_folder + '/test_data.npy')
 n_stim = training_set.shape[1]
 
 # test inference on subset of test data
-test_samples = 128
+test_samples = 256
 test_n_sample = 16
 test_iter_idx = int(test_set.shape[0]/n_shape/test_samples)
 

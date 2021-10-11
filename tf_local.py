@@ -657,7 +657,7 @@ if __name__ == "__main__":
 
     # create external input
     batch_size = 256
-    n_shape = 10
+    n_shape = 5
     n_samples = 1024
 
     # simulate
