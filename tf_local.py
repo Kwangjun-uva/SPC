@@ -656,9 +656,9 @@ if __name__ == "__main__":
     n_gist = 12 ** 2
 
     # create external input
-    batch_size = 256
-    n_shape = 5
-    n_samples = 1024
+    batch_size = 100
+    n_shape = 10
+    n_samples = 10
 
     # simulate
     sim_dur = 350 * 10 ** (-3)  # ms
@@ -666,7 +666,7 @@ if __name__ == "__main__":
     learning_window = 100 * 10 ** -3
     report_index = 1
 
-    n_epoch = 100
+    n_epoch = 2
     lrate = np.repeat(1.0, n_pc_layers) * 10 ** -7
     # lrate = np.array([1.0, 0.25, 0.1]) * 10 ** -9
     reg_alpha = np.repeat(1.0, n_pc_layers) * 10 ** -12
@@ -692,7 +692,7 @@ if __name__ == "__main__":
 
     # test inference on test data
     test_n_shape = n_shape
-    test_n_sample = 16
+    test_n_sample = 1
     test_iter_idx = int(n_samples/test_n_sample)
 
     testing_set = test_set[::test_iter_idx]
